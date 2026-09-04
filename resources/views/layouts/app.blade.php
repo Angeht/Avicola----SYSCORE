@@ -65,6 +65,13 @@
                             </x-nav-link>
                         @endif
 
+                        @if ($authenticatedUser?->tienePermiso('TIPOS_JABA_GESTIONAR'))
+                            <x-nav-link :href="route('tipos-jaba.index')" :active="request()->routeIs('tipos-jaba.*')">
+                                <x-slot:icon><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16l-2 12H6L4 7Z" /><path d="M8 7V4h8v3M7 11h10m-9 4h8" /></svg></x-slot:icon>
+                                Jabas y taras
+                            </x-nav-link>
+                        @endif
+
                         @if ($authenticatedUser?->tieneAlgunPermiso(['CARGAS_REGISTRAR', 'PRECIO_DIA_GESTIONAR', 'MERCADERIA_AJUSTAR']))
                             <x-nav-link :href="route('productos.index')" :active="request()->routeIs('productos.*')">
                                 <x-slot:icon><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 7 8-4 8 4-8 4-8-4Z" /><path d="m4 7v10l8 4 8-4V7m-8 4v10" /></svg></x-slot:icon>
@@ -136,8 +143,8 @@
                             </x-nav-link>
                         @endif
 
-                        @if ($authenticatedUser?->tieneAlgunPermiso(['CONFIGURACION_EMPRESA_GESTIONAR', 'TIPOS_JABA_GESTIONAR']))
-                            <x-nav-link :href="$authenticatedUser->tienePermiso('CONFIGURACION_EMPRESA_GESTIONAR') ? route('configuracion.edit') : route('tipos-jaba.index')" :active="request()->routeIs('configuracion.*', 'tipos-jaba.*')">
+                        @if ($authenticatedUser?->tienePermiso('CONFIGURACION_EMPRESA_GESTIONAR'))
+                            <x-nav-link :href="route('configuracion.edit')" :active="request()->routeIs('configuracion.*')">
                                 <x-slot:icon><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16v12H4V6Z" /><path d="M8 10h8m-8 4h5" /><path d="M7 3v3m10-3v3" /></svg></x-slot:icon>
                                 Configuración
                             </x-nav-link>

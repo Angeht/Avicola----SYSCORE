@@ -35,10 +35,13 @@ class PrecioDiaControllerTest extends TestCase
         $this->travelTo('2026-08-27 09:00:00');
         $user = $this->userWithPermission();
         $chicken = Producto::factory()->create(['nombre' => 'POLLO ENTERO']);
+        $preciseChicken = Producto::factory()->create(['nombre' => 'POLLO PRECIO FRACCIONADO']);
         $otherProduct = Producto::factory()->create(['nombre' => 'GALLINA']);
         $chickenPrice = PrecioDia::factory()->create(['producto_id' => $chicken->id]);
+        $preciseChickenPrice = PrecioDia::factory()->create(['producto_id' => $preciseChicken->id]);
         $otherPrice = PrecioDia::factory()->create(['producto_id' => $otherProduct->id]);
         PrecioDiaVersion::factory()->create(['precio_dia_id' => $chickenPrice->id, 'precio_kg' => 7.25]);
+        PrecioDiaVersion::factory()->create(['precio_dia_id' => $preciseChickenPrice->id, 'precio_kg' => 7.2525]);
         PrecioDiaVersion::factory()->create(['precio_dia_id' => $otherPrice->id, 'precio_kg' => 6.10]);
 
         $response = $this->actingAs($user)->get(route('precios-dia.index', [
@@ -50,7 +53,9 @@ class PrecioDiaControllerTest extends TestCase
             ->assertOk()
             ->assertSee('POLLO ENTERO')
             ->assertDontSee('GALLINA')
-            ->assertSee('S/ 7,2500');
+            ->assertSee('S/ 7,25')
+            ->assertSee('S/ 7,2525')
+            ->assertDontSee('S/ 7,2500');
     }
 
     public function test_valid_payload_creates_initial_price_version_for_authenticated_user(): void

@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Contracts\GestorRespaldos;
 use App\Contracts\MotorRespaldoBaseDatos;
+use App\Models\AjusteCliente;
 use App\Models\AjusteMercaderia;
+use App\Models\AjusteProveedor;
 use App\Models\AuditableModelObserver;
 use App\Models\CargaProveedor;
 use App\Models\Cliente;
@@ -51,7 +53,9 @@ class AppServiceProvider extends ServiceProvider
         Model::preventLazyLoading(! app()->isProduction());
 
         foreach ([
+            AjusteCliente::class,
             AjusteMercaderia::class,
+            AjusteProveedor::class,
             CargaProveedor::class,
             Cliente::class,
             Cobranza::class,

@@ -14,16 +14,12 @@
         $previewMessage = old('mensaje_ticket', $company->mensaje_ticket) ?: 'Gracias por su compra.';
     @endphp
 
-    <header class="reveal-up grid gap-5 border-b-2 border-ink-950 pb-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+    <header class="reveal-up border-b-2 border-ink-950 pb-6">
         <div>
             <p class="font-mono text-[10px] font-semibold tracking-[0.22em] text-signal uppercase">Administración / Identidad</p>
             <h1 class="mt-3 max-w-4xl font-display text-4xl font-extrabold tracking-tight text-ink-950 uppercase sm:text-5xl">Configuración de la empresa</h1>
             <p class="mt-4 max-w-3xl text-sm leading-6 text-steel-500">Estos datos identifican el negocio en el sistema y forman el encabezado de los comprobantes.</p>
         </div>
-        <a href="{{ route('tipos-jaba.index') }}" class="inline-flex min-h-11 items-center justify-center gap-2 border border-ink-950 px-5 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase transition hover:bg-ink-950 hover:text-white">
-            Jabas y taras
-            <span aria-hidden="true">→</span>
-        </a>
     </header>
 
     <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">

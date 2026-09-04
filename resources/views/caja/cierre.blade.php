@@ -54,11 +54,13 @@
                     <x-form-field name="observacion_cierre" label="Observación del cierre" hint="Obligatoria si existe diferencia">
                         <textarea id="observacion_cierre" name="observacion_cierre" rows="3" maxlength="255" placeholder="Describe faltantes, sobrantes o cualquier incidencia" class="w-full resize-y border border-line bg-white px-4 py-3 text-sm text-ink-950 outline-none transition placeholder:text-steel-300 focus:border-signal focus:ring-2 focus:ring-signal/15" aria-describedby="@error('observacion_cierre') observacion_cierre-error @enderror">{{ old('observacion_cierre') }}</textarea>
                     </x-form-field>
+
+                    <x-confirmacion-pin-administrador :administrators="$administrators" :pin-setup-user="$pinSetupUser" operation="el cierre del día" />
                 </div>
 
                 <div class="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-6 sm:flex-row sm:justify-end">
                     <a href="{{ route('caja.show', $cashSession) }}" class="inline-flex min-h-12 items-center justify-center border border-line px-6 font-display text-sm font-bold tracking-wider text-ink-700 uppercase transition hover:border-ink-950">Cancelar</a>
-                    <button type="submit" class="inline-flex min-h-12 items-center justify-center bg-danger px-7 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-950">Confirmar cierre</button>
+                    <button type="submit" @disabled($administrators->isEmpty()) class="inline-flex min-h-12 items-center justify-center bg-danger px-7 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-950 disabled:cursor-not-allowed disabled:bg-steel-300">Confirmar cierre</button>
                 </div>
             </form>
         </section>

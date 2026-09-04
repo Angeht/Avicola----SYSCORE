@@ -33,6 +33,7 @@
     <dl class="border-y-2 border-dashed border-ink-950 py-3 text-[11px] leading-6">
         <div class="flex justify-between"><dt>Total recibido</dt><dd class="font-mono text-base font-extrabold">{{ $money($collection->monto_total) }}</dd></div>
         <div class="flex justify-between"><dt>Aplicado</dt><dd class="font-mono">{{ $money($appliedAmount) }}</dd></div>
+        @if ($roundingAmount > 0)<div class="flex justify-between"><dt>Redondeo</dt><dd class="font-mono">{{ $money($roundingAmount) }}</dd></div>@endif
         <div class="flex justify-between"><dt>Sin aplicar</dt><dd class="font-mono font-bold">{{ $money($unappliedAmount) }}</dd></div>
     </dl>
 

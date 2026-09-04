@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\CustomerAccountReportRequest;
 use App\Http\Requests\ReportFiltersRequest;
+use App\Http\Requests\SupplierAccountReportRequest;
 use App\Models\Cliente;
 use App\Models\ConfiguracionEmpresa;
 use App\Models\Producto;
@@ -64,6 +65,7 @@ class ReporteController extends Controller
                 'cantidad_ventas' => ['label' => 'Ventas realizadas', 'format' => 'integer'],
                 'total_deuda' => ['label' => 'Total deuda', 'format' => 'money'],
                 'total_abonado' => ['label' => 'Total abonado', 'format' => 'money'],
+                'total_ajustado' => ['label' => 'Descuentos y devoluciones', 'format' => 'money'],
                 'deuda_actual' => ['label' => 'Restante por pagar', 'format' => 'money'],
                 'cantidad_pagos' => ['label' => 'Cobros', 'format' => 'integer'],
                 'ultimo_pago' => ['label' => 'Último pago', 'format' => 'date'],
@@ -71,20 +73,21 @@ class ReporteController extends Controller
             ],
         ],
         'deudas-proveedores' => [
-            'title' => 'Deudas con proveedores',
-            'description' => 'Cargas pendientes de pago, proveedor, producto y saldo actual.',
+            'title' => 'Deudas y abonos por proveedor',
+            'description' => 'Resume todas las cargas, pagos, ajustes y la deuda acumulada de cada proveedor.',
             'eyebrow' => 'Finanzas / Proveedores',
-            'filters' => ['proveedor', 'producto', 'estado'],
-            'states' => ['TODOS' => 'Pendientes y parciales', 'PENDIENTE' => 'Sin pagos', 'PARCIAL' => 'Pago parcial'],
+            'filters' => ['proveedor', 'estado'],
+            'states' => ['TODOS' => 'Todos los proveedores', 'PENDIENTE' => 'Sin pagos', 'PARCIAL' => 'Con deuda actual', 'SALDADA' => 'Sin deuda'],
             'columns' => [
-                'fecha' => ['label' => 'Fecha', 'format' => 'date'],
-                'numero_carga' => ['label' => 'Carga', 'format' => 'text'],
                 'proveedor' => ['label' => 'Proveedor', 'format' => 'text'],
-                'producto' => ['label' => 'Producto', 'format' => 'text'],
-                'peso_neto_kg' => ['label' => 'Peso kg', 'format' => 'decimal3'],
-                'costo_total' => ['label' => 'Costo', 'format' => 'money'],
+                'numero_cuenta' => ['label' => 'Cuenta / CCI', 'format' => 'text'],
+                'cantidad_cargas' => ['label' => 'Cargas', 'format' => 'integer'],
+                'total_cargas' => ['label' => 'Total cargas', 'format' => 'money'],
                 'total_pagado' => ['label' => 'Pagado', 'format' => 'money'],
-                'saldo_pendiente' => ['label' => 'Saldo', 'format' => 'money'],
+                'total_ajustado' => ['label' => 'Ajustado', 'format' => 'money'],
+                'deuda_actual' => ['label' => 'Deuda acumulada', 'format' => 'money'],
+                'cantidad_pagos' => ['label' => 'Abonos', 'format' => 'integer'],
+                'ultimo_pago' => ['label' => 'Último pago', 'format' => 'date'],
                 'estado' => ['label' => 'Estado', 'format' => 'status'],
             ],
         ],
@@ -197,6 +200,7 @@ class ReporteController extends Controller
             fputcsv($stream, ['Corte al', $cutoff], ';', '"', '');
             fputcsv($stream, ['Total de ventas', $this->csvValue($account['summary']['total_sales'], 'money')], ';', '"', '');
             fputcsv($stream, ['Total abonado', $this->csvValue($account['summary']['total_collections'], 'money')], ';', '"', '');
+            fputcsv($stream, ['Total ajustado', $this->csvValue($account['summary']['total_adjustments'], 'money')], ';', '"', '');
             fputcsv($stream, ['Restante por pagar', $this->csvValue($account['summary']['remaining'], 'money')], ';', '"', '');
             fputcsv($stream, [], ';', '"', '');
             fputcsv($stream, ['Fecha', 'Movimiento', 'Documento', 'Detalle', 'Venta (cargo)', 'Abono (pago)', 'Saldo acumulado'], ';', '"', '');
@@ -254,6 +258,106 @@ class ReporteController extends Controller
             'cycleReset' => $cycle['reset_after_settlement'],
             'generatedAt' => now(),
             'movements' => $cycle['movements']->limit(200)->get(),
+            'status' => $account['status'],
+            'summary' => $cycle['summary'],
+            'truncated' => $cycle['movements_count'] > 200,
+        ]);
+    }
+
+    public function supplierAccount(SupplierAccountReportRequest $request, Proveedor $proveedor): View
+    {
+        $cutoff = $request->string('hasta')->toString();
+        $account = $this->supplierAccountData($proveedor, $cutoff);
+
+        return view('reportes.supplier-account', [
+            'cutoff' => $cutoff,
+            'movements' => $account['movements']->paginate(30)->withQueryString(),
+            'proveedor' => $proveedor,
+            'status' => $account['status'],
+            'summary' => $account['summary'],
+        ]);
+    }
+
+    public function supplierAccountCsv(SupplierAccountReportRequest $request, Proveedor $proveedor): StreamedResponse
+    {
+        $cutoff = $request->string('hasta')->toString();
+        $account = $this->supplierAccountData($proveedor, $cutoff);
+        $filename = 'estado-de-cuenta-'.Str::slug($proveedor->nombre_razon_social).'-'.$cutoff.'.csv';
+
+        return response()->streamDownload(function () use ($account, $proveedor, $cutoff): void {
+            $stream = fopen('php://output', 'wb');
+
+            if ($stream === false) {
+                return;
+            }
+
+            fwrite($stream, "\xEF\xBB\xBF");
+            fputcsv($stream, ['Estado de cuenta del proveedor'], ';', '"', '');
+            fputcsv($stream, ['Proveedor', $this->csvValue($proveedor->nombre_razon_social, 'text')], ';', '"', '');
+            fputcsv($stream, ['Documento', $this->csvValue($proveedor->nro_documento, 'text')], ';', '"', '');
+            fputcsv($stream, ['Cuenta / CCI', $this->csvValue($proveedor->numero_cuenta, 'text')], ';', '"', '');
+            fputcsv($stream, ['Corte al', $cutoff], ';', '"', '');
+            fputcsv($stream, ['Total de cargas', $this->csvValue($account['summary']['total_loads'], 'money')], ';', '"', '');
+            fputcsv($stream, ['Total pagado', $this->csvValue($account['summary']['total_payments'], 'money')], ';', '"', '');
+            fputcsv($stream, ['Total ajustado', $this->csvValue($account['summary']['total_adjustments'], 'money')], ';', '"', '');
+            fputcsv($stream, ['Deuda acumulada', $this->csvValue($account['summary']['remaining'], 'money')], ';', '"', '');
+            fputcsv($stream, [], ';', '"', '');
+            fputcsv($stream, ['Fecha', 'Movimiento', 'Documento', 'Carga', 'Detalle', 'Carga (cargo)', 'Abono / ajuste', 'Saldo acumulado'], ';', '"', '');
+
+            foreach ($account['movements']->cursor() as $movement) {
+                fputcsv($stream, [
+                    $movement->fecha_movimiento,
+                    $movement->tipo,
+                    $this->csvValue($movement->documento, 'text'),
+                    $this->csvValue($movement->numero_carga, 'text'),
+                    $this->csvValue($movement->detalle, 'text'),
+                    $this->csvValue($movement->cargo, 'money'),
+                    $this->csvValue($movement->abono, 'money'),
+                    $this->csvValue($movement->saldo_acumulado, 'money'),
+                ], ';', '"', '');
+            }
+
+            fclose($stream);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function supplierAccountPrint(SupplierAccountReportRequest $request, Proveedor $proveedor): View
+    {
+        $cutoff = $request->string('hasta')->toString();
+        $account = $this->supplierAccountData($proveedor, $cutoff);
+        $totalRows = (clone $account['movements'])->reorder()->count();
+
+        return view('reportes.supplier-account-print', [
+            'cutoff' => $cutoff,
+            'generatedAt' => now(),
+            'movements' => $account['movements']->limit(1000)->get(),
+            'proveedor' => $proveedor,
+            'status' => $account['status'],
+            'summary' => $account['summary'],
+            'truncated' => $totalRows > 1000,
+        ]);
+    }
+
+    public function supplierAccountTicket(SupplierAccountReportRequest $request, Proveedor $proveedor): View
+    {
+        $cutoff = $request->string('hasta')->toString();
+        $account = $this->supplierAccountData($proveedor, $cutoff);
+        $cycle = $this->currentSupplierAccountCycle($account['movements']);
+
+        return view('reportes.supplier-account-ticket', [
+            'company' => ConfiguracionEmpresa::query()
+                ->with('tipoDocumento:id,codigo,nombre')
+                ->firstOrNew(['id' => 1], [
+                    'razon_social' => 'AVÍCOLA - CONFIGURAR',
+                    'nombre_comercial' => 'AVÍCOLA - CONFIGURAR',
+                ]),
+            'cutoff' => $cutoff,
+            'cycleReset' => $cycle['reset_after_settlement'],
+            'generatedAt' => now(),
+            'movements' => $cycle['movements']->limit(200)->get(),
+            'proveedor' => $proveedor,
             'status' => $account['status'],
             'summary' => $cycle['summary'],
             'truncated' => $cycle['movements_count'] > 200,
@@ -387,6 +491,15 @@ class ReporteController extends Controller
      */
     private function customerAccountData(Cliente $cliente, string $cutoff): array
     {
+        $saleType = $this->normalizedReportText("'VENTA'");
+        $saleDocument = $this->normalizedReportText('v.numero_venta');
+        $saleDetail = $this->normalizedReportText("CONCAT(COALESCE(productos_venta.productos, 'Sin producto'), ' · ', v.peso_neto_kg, ' kg')");
+        $collectionType = $this->normalizedReportText("'ABONO'");
+        $collectionDocument = $this->normalizedReportText('c.numero_cobranza');
+        $collectionDetail = $this->normalizedReportText("CONCAT('Medio: ', mp.nombre)");
+        $adjustmentType = $this->normalizedReportText("'AJUSTE'");
+        $adjustmentDocument = $this->normalizedReportText('a.numero_ajuste');
+        $adjustmentDetail = $this->normalizedReportText("CONCAT(CASE a.tipo WHEN 'DESCUENTO' THEN 'Descuento' WHEN 'DEVOLUCION' THEN 'Devolución' ELSE 'Redondeo' END, ': ', a.motivo)");
         $saleProducts = DB::table('venta_detalles as vd')
             ->join('precio_dia_versiones as pv', 'pv.id', '=', 'vd.precio_version_id')
             ->join('precios_dia as pd', 'pd.id', '=', 'pv.precio_dia_id')
@@ -396,8 +509,8 @@ class ReporteController extends Controller
         $sales = DB::table('vw_totales_venta as v')
             ->leftJoinSub($saleProducts, 'productos_venta', fn (JoinClause $join): JoinClause => $join->on('productos_venta.venta_id', '=', 'v.venta_id'))
             ->selectRaw('v.fecha_venta as fecha_movimiento, 1 as orden, v.venta_id as referencia_id')
-            ->selectRaw("'VENTA' as tipo, v.numero_venta as documento")
-            ->selectRaw("CONCAT(COALESCE(productos_venta.productos, 'Sin producto'), ' · ', v.peso_neto_kg, ' kg') as detalle")
+            ->selectRaw("{$saleType} as tipo, {$saleDocument} as documento")
+            ->selectRaw("{$saleDetail} as detalle")
             ->selectRaw('v.total_venta as cargo, 0 as abono')
             ->where('v.cliente_id', $cliente->id)
             ->where('v.estado', 'ACTIVA')
@@ -405,28 +518,41 @@ class ReporteController extends Controller
         $collections = DB::table('cobranzas as c')
             ->join('medios_pago as mp', 'mp.id', '=', 'c.medio_pago_id')
             ->selectRaw('c.fecha_pago as fecha_movimiento, 2 as orden, c.id as referencia_id')
-            ->selectRaw("'ABONO' as tipo, c.numero_cobranza as documento")
-            ->selectRaw("CONCAT('Medio: ', mp.nombre) as detalle")
+            ->selectRaw("{$collectionType} as tipo, {$collectionDocument} as documento")
+            ->selectRaw("{$collectionDetail} as detalle")
             ->selectRaw('0 as cargo, c.monto_total as abono')
             ->where('c.cliente_id', $cliente->id)
             ->whereNull('c.anulada_at')
             ->whereDate('c.fecha_pago', '<=', $cutoff);
+        $adjustments = DB::table('ajustes_cliente as a')
+            ->join('ventas as v', 'v.id', '=', 'a.venta_id')
+            ->selectRaw('a.fecha_ajuste as fecha_movimiento, 3 as orden, a.id as referencia_id')
+            ->selectRaw("{$adjustmentType} as tipo, {$adjustmentDocument} as documento")
+            ->selectRaw("{$adjustmentDetail} as detalle")
+            ->selectRaw('0 as cargo, a.monto as abono')
+            ->where('v.cliente_id', $cliente->id)
+            ->whereNull('v.anulada_at')
+            ->whereNull('a.anulado_at')
+            ->whereDate('a.fecha_ajuste', '<=', $cutoff);
 
         $salesCount = (clone $sales)->count();
         $collectionsCount = (clone $collections)->count();
+        $adjustmentsCount = (clone $adjustments)->count();
         $totalSalesCents = (int) round((float) (clone $sales)->sum('v.total_venta') * 100);
         $totalCollectionsCents = (int) round((float) (clone $collections)->sum('c.monto_total') * 100);
-        $remainingCents = max($totalSalesCents - $totalCollectionsCents, 0);
-        $creditCents = max($totalCollectionsCents - $totalSalesCents, 0);
+        $totalAdjustmentsCents = (int) round((float) (clone $adjustments)->sum('a.monto') * 100);
+        $coveredCents = $totalCollectionsCents + $totalAdjustmentsCents;
+        $remainingCents = max($totalSalesCents - $coveredCents, 0);
+        $creditCents = max($coveredCents - $totalSalesCents, 0);
         $status = match (true) {
-            $salesCount === 0 && $collectionsCount === 0 => 'SIN_MOVIMIENTOS',
+            $salesCount === 0 && $collectionsCount === 0 && $adjustmentsCount === 0 => 'SIN_MOVIMIENTOS',
             $creditCents > 0 => 'SALDO_FAVOR',
             $remainingCents === 0 => 'SALDADA',
-            $totalCollectionsCents === 0 => 'PENDIENTE',
+            $coveredCents === 0 => 'PENDIENTE',
             default => 'PARCIAL',
         };
         $movements = DB::query()
-            ->fromSub($sales->unionAll($collections), 'movimientos_cliente')
+            ->fromSub($sales->unionAll($collections)->unionAll($adjustments), 'movimientos_cliente')
             ->select('movimientos_cliente.*')
             ->selectRaw('ROUND(SUM(cargo - abono) OVER (ORDER BY fecha_movimiento, orden, referencia_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 2) as saldo_acumulado')
             ->orderBy('fecha_movimiento')
@@ -441,6 +567,9 @@ class ReporteController extends Controller
                 'total_sales' => $totalSalesCents / 100,
                 'collections_count' => $collectionsCount,
                 'total_collections' => $totalCollectionsCents / 100,
+                'adjustments_count' => $adjustmentsCount,
+                'total_adjustments' => $totalAdjustmentsCents / 100,
+                'total_credits' => $coveredCents / 100,
                 'remaining' => $remainingCents / 100,
                 'credit' => $creditCents / 100,
             ],
@@ -496,11 +625,15 @@ class ReporteController extends Controller
             ->selectRaw('COUNT(*) as movements_count')
             ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'VENTA' THEN 1 ELSE 0 END), 0) as sales_count")
             ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'ABONO' THEN 1 ELSE 0 END), 0) as collections_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' THEN 1 ELSE 0 END), 0) as adjustments_count")
             ->selectRaw('COALESCE(SUM(cargo), 0) as total_sales')
-            ->selectRaw('COALESCE(SUM(abono), 0) as total_collections')
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'ABONO' THEN abono ELSE 0 END), 0) as total_collections")
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' THEN abono ELSE 0 END), 0) as total_adjustments")
             ->firstOrFail();
         $totalSalesCents = (int) round((float) $totals->total_sales * 100);
         $totalCollectionsCents = (int) round((float) $totals->total_collections * 100);
+        $totalAdjustmentsCents = (int) round((float) $totals->total_adjustments * 100);
+        $coveredCents = $totalCollectionsCents + $totalAdjustmentsCents;
 
         return [
             'movements' => $cycleMovements,
@@ -511,8 +644,190 @@ class ReporteController extends Controller
                 'total_sales' => $totalSalesCents / 100,
                 'collections_count' => (int) $totals->collections_count,
                 'total_collections' => $totalCollectionsCents / 100,
-                'remaining' => max($totalSalesCents - $totalCollectionsCents, 0) / 100,
-                'credit' => max($totalCollectionsCents - $totalSalesCents, 0) / 100,
+                'adjustments_count' => (int) $totals->adjustments_count,
+                'total_adjustments' => $totalAdjustmentsCents / 100,
+                'total_credits' => $coveredCents / 100,
+                'remaining' => max($totalSalesCents - $coveredCents, 0) / 100,
+                'credit' => max($coveredCents - $totalSalesCents, 0) / 100,
+            ],
+        ];
+    }
+
+    /**
+     * @return array{
+     *     movements: Builder,
+     *     movements_count: int,
+     *     reset_after_settlement: bool,
+     *     summary: array{
+     *         loads_count: int,
+     *         total_loads: int|float,
+     *         payments_count: int,
+     *         total_payments: int|float,
+     *         adjustments_count: int,
+     *         total_adjustments: int|float,
+     *         total_credits: int|float,
+     *         remaining: int|float
+     *     }
+     * }
+     */
+    private function currentSupplierAccountCycle(Builder $movements): array
+    {
+        $lastSettledMovement = DB::query()
+            ->fromSub((clone $movements)->reorder(), 'historial_cuenta_proveedor')
+            ->where('saldo_acumulado', 0)
+            ->orderByDesc('fecha_movimiento')
+            ->orderByDesc('orden')
+            ->orderByDesc('referencia_id')
+            ->first(['fecha_movimiento', 'orden', 'referencia_id']);
+        $cycleMovements = DB::query()
+            ->fromSub((clone $movements)->reorder(), 'ciclo_cuenta_proveedor')
+            ->select('ciclo_cuenta_proveedor.*')
+            ->when($lastSettledMovement, function (Builder $query, object $settledMovement): void {
+                $query->where(function (Builder $query) use ($settledMovement): void {
+                    $query->where('fecha_movimiento', '>', $settledMovement->fecha_movimiento)
+                        ->orWhere(function (Builder $query) use ($settledMovement): void {
+                            $query->where('fecha_movimiento', $settledMovement->fecha_movimiento)
+                                ->where('orden', '>', $settledMovement->orden);
+                        })
+                        ->orWhere(function (Builder $query) use ($settledMovement): void {
+                            $query->where('fecha_movimiento', $settledMovement->fecha_movimiento)
+                                ->where('orden', $settledMovement->orden)
+                                ->where('referencia_id', '>', $settledMovement->referencia_id);
+                        });
+                });
+            })
+            ->orderBy('fecha_movimiento')
+            ->orderBy('orden')
+            ->orderBy('referencia_id');
+        $totals = DB::query()
+            ->fromSub((clone $cycleMovements)->reorder(), 'resumen_ciclo_proveedor')
+            ->selectRaw('COUNT(*) as movements_count')
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'CARGA' THEN 1 ELSE 0 END), 0) as loads_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'ABONO' THEN 1 ELSE 0 END), 0) as payments_count")
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' THEN 1 ELSE 0 END), 0) as adjustments_count")
+            ->selectRaw('COALESCE(SUM(cargo), 0) as total_loads')
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'ABONO' THEN abono ELSE 0 END), 0) as total_payments")
+            ->selectRaw("COALESCE(SUM(CASE WHEN tipo = 'AJUSTE' THEN abono ELSE 0 END), 0) as total_adjustments")
+            ->firstOrFail();
+        $totalLoadsCents = (int) round((float) $totals->total_loads * 100);
+        $totalPaymentsCents = (int) round((float) $totals->total_payments * 100);
+        $totalAdjustmentsCents = (int) round((float) $totals->total_adjustments * 100);
+        $coveredCents = $totalPaymentsCents + $totalAdjustmentsCents;
+
+        return [
+            'movements' => $cycleMovements,
+            'movements_count' => (int) $totals->movements_count,
+            'reset_after_settlement' => $lastSettledMovement !== null,
+            'summary' => [
+                'loads_count' => (int) $totals->loads_count,
+                'total_loads' => $totalLoadsCents / 100,
+                'payments_count' => (int) $totals->payments_count,
+                'total_payments' => $totalPaymentsCents / 100,
+                'adjustments_count' => (int) $totals->adjustments_count,
+                'total_adjustments' => $totalAdjustmentsCents / 100,
+                'total_credits' => $coveredCents / 100,
+                'remaining' => max($totalLoadsCents - $coveredCents, 0) / 100,
+            ],
+        ];
+    }
+
+    /**
+     * @return array{
+     *     movements: Builder,
+     *     status: string,
+     *     summary: array{
+     *         loads_count: int,
+     *         total_loads: int|float,
+     *         payments_count: int,
+     *         total_payments: int|float,
+     *         adjustments_count: int,
+     *         total_adjustments: int|float,
+     *         total_credits: int|float,
+     *         remaining: int|float
+     *     }
+     * }
+     */
+    private function supplierAccountData(Proveedor $proveedor, string $cutoff): array
+    {
+        $loadType = $this->normalizedReportText("'CARGA'");
+        $loadDocument = $this->normalizedReportText('s.numero_carga');
+        $loadNumber = $this->normalizedReportText('s.numero_carga');
+        $loadDetail = $this->normalizedReportText("CONCAT(p.nombre, ' · ', s.peso_neto_kg, ' kg')");
+        $paymentType = $this->normalizedReportText("'ABONO'");
+        $paymentDocument = $this->normalizedReportText('pp.numero_pago');
+        $paymentLoadNumber = $this->normalizedReportText('c.numero_carga');
+        $paymentDetail = $this->normalizedReportText("CONCAT('Carga ', c.numero_carga, ' · ', mp.nombre)");
+        $adjustmentType = $this->normalizedReportText("'AJUSTE'");
+        $adjustmentDocument = $this->normalizedReportText('a.numero_ajuste');
+        $adjustmentLoadNumber = $this->normalizedReportText('c.numero_carga');
+        $adjustmentDetail = $this->normalizedReportText("CONCAT(CASE a.tipo WHEN 'DESCUENTO' THEN 'Descuento' ELSE 'Devolución' END, ' · Carga ', c.numero_carga, ': ', a.motivo)");
+        $loads = DB::table('vw_saldos_carga_proveedor as s')
+            ->join('cargas_proveedor as c', 'c.id', '=', 's.carga_id')
+            ->join('productos as p', 'p.id', '=', 'c.producto_id')
+            ->selectRaw('s.fecha_carga as fecha_movimiento, 1 as orden, s.carga_id as referencia_id')
+            ->selectRaw("{$loadType} as tipo, {$loadDocument} as documento, s.carga_id, {$loadNumber} as numero_carga")
+            ->selectRaw("{$loadDetail} as detalle")
+            ->selectRaw('s.costo_total as cargo, 0 as abono')
+            ->where('s.proveedor_id', $proveedor->id)
+            ->where('s.estado_pago', '<>', 'ANULADA')
+            ->where('s.costo_total', '>', 0)
+            ->whereDate('s.fecha_carga', '<=', $cutoff);
+        $payments = DB::table('pagos_proveedor as pp')
+            ->join('cargas_proveedor as c', 'c.id', '=', 'pp.carga_id')
+            ->join('medios_pago as mp', 'mp.id', '=', 'pp.medio_pago_id')
+            ->selectRaw('pp.pagado_at as fecha_movimiento, 2 as orden, pp.id as referencia_id')
+            ->selectRaw("{$paymentType} as tipo, {$paymentDocument} as documento, c.id as carga_id, {$paymentLoadNumber} as numero_carga")
+            ->selectRaw("{$paymentDetail} as detalle")
+            ->selectRaw('0 as cargo, pp.monto as abono')
+            ->where('c.proveedor_id', $proveedor->id)
+            ->whereNull('c.anulada_at')
+            ->whereNull('pp.anulada_at')
+            ->whereDate('pp.pagado_at', '<=', $cutoff);
+        $adjustments = DB::table('ajustes_proveedor as a')
+            ->join('cargas_proveedor as c', 'c.id', '=', 'a.carga_id')
+            ->selectRaw('a.fecha_ajuste as fecha_movimiento, 3 as orden, a.id as referencia_id')
+            ->selectRaw("{$adjustmentType} as tipo, {$adjustmentDocument} as documento, c.id as carga_id, {$adjustmentLoadNumber} as numero_carga")
+            ->selectRaw("{$adjustmentDetail} as detalle")
+            ->selectRaw('0 as cargo, a.monto as abono')
+            ->where('c.proveedor_id', $proveedor->id)
+            ->whereNull('c.anulada_at')
+            ->whereNull('a.anulado_at')
+            ->whereDate('a.fecha_ajuste', '<=', $cutoff);
+
+        $loadsCount = (clone $loads)->count();
+        $paymentsCount = (clone $payments)->count();
+        $adjustmentsCount = (clone $adjustments)->count();
+        $totalLoadsCents = (int) round((float) (clone $loads)->sum('s.costo_total') * 100);
+        $totalPaymentsCents = (int) round((float) (clone $payments)->sum('pp.monto') * 100);
+        $totalAdjustmentsCents = (int) round((float) (clone $adjustments)->sum('a.monto') * 100);
+        $coveredCents = $totalPaymentsCents + $totalAdjustmentsCents;
+        $remainingCents = max($totalLoadsCents - $coveredCents, 0);
+        $status = match (true) {
+            $loadsCount === 0 && $paymentsCount === 0 && $adjustmentsCount === 0 => 'SIN_MOVIMIENTOS',
+            $remainingCents === 0 => 'SALDADA',
+            $coveredCents === 0 => 'PENDIENTE',
+            default => 'PARCIAL',
+        };
+        $movements = DB::query()
+            ->fromSub($loads->unionAll($payments)->unionAll($adjustments), 'movimientos_proveedor')
+            ->select('movimientos_proveedor.*')
+            ->selectRaw('ROUND(SUM(cargo - abono) OVER (ORDER BY fecha_movimiento, orden, referencia_id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW), 2) as saldo_acumulado')
+            ->orderBy('fecha_movimiento')
+            ->orderBy('orden')
+            ->orderBy('referencia_id');
+
+        return [
+            'movements' => $movements,
+            'status' => $status,
+            'summary' => [
+                'loads_count' => $loadsCount,
+                'total_loads' => $totalLoadsCents / 100,
+                'payments_count' => $paymentsCount,
+                'total_payments' => $totalPaymentsCents / 100,
+                'adjustments_count' => $adjustmentsCount,
+                'total_adjustments' => $totalAdjustmentsCents / 100,
+                'total_credits' => $coveredCents / 100,
+                'remaining' => $remainingCents / 100,
             ],
         ];
     }
@@ -560,20 +875,32 @@ class ReporteController extends Controller
             ->whereNull('co.anulada_at')
             ->whereDate('co.fecha_pago', '<=', $filters['hasta'])
             ->groupBy('co.cliente_id');
+        $adjustments = DB::table('ajustes_cliente as a')
+            ->join('ventas as va', 'va.id', '=', 'a.venta_id')
+            ->selectRaw('va.cliente_id')
+            ->selectRaw('COALESCE(SUM(a.monto), 0) as total_ajustado')
+            ->whereNotNull('va.cliente_id')
+            ->whereNull('va.anulada_at')
+            ->whereNull('a.anulado_at')
+            ->whereDate('a.fecha_ajuste', '<=', $filters['hasta'])
+            ->groupBy('va.cliente_id');
         $balances = DB::table('clientes as c')
             ->leftJoinSub($sales, 'v', fn (JoinClause $join): JoinClause => $join->on('v.cliente_id', '=', 'c.id'))
             ->leftJoinSub($collections, 'co', fn (JoinClause $join): JoinClause => $join->on('co.cliente_id', '=', 'c.id'))
+            ->leftJoinSub($adjustments, 'aj', fn (JoinClause $join): JoinClause => $join->on('aj.cliente_id', '=', 'c.id'))
             ->selectRaw('c.id as cliente_id, c.nombres_razon_social as cliente')
             ->selectRaw('COALESCE(v.cantidad_ventas, 0) as cantidad_ventas')
             ->selectRaw('ROUND(COALESCE(v.total_deuda, 0), 2) as total_deuda')
             ->selectRaw('ROUND(COALESCE(co.total_abonado, 0), 2) as total_abonado')
-            ->selectRaw('ROUND(GREATEST(COALESCE(v.total_deuda, 0) - COALESCE(co.total_abonado, 0), 0), 2) as deuda_actual')
+            ->selectRaw('ROUND(COALESCE(aj.total_ajustado, 0), 2) as total_ajustado')
+            ->selectRaw('ROUND(GREATEST(COALESCE(v.total_deuda, 0) - COALESCE(co.total_abonado, 0) - COALESCE(aj.total_ajustado, 0), 0), 2) as deuda_actual')
             ->selectRaw('COALESCE(co.cantidad_pagos, 0) as cantidad_pagos')
             ->selectRaw('co.ultimo_pago')
-            ->selectRaw("CASE WHEN COALESCE(co.total_abonado, 0) > COALESCE(v.total_deuda, 0) THEN 'SALDO_FAVOR' WHEN COALESCE(v.total_deuda, 0) = COALESCE(co.total_abonado, 0) THEN 'SALDADA' WHEN COALESCE(co.total_abonado, 0) = 0 THEN 'PENDIENTE' ELSE 'PARCIAL' END as estado")
+            ->selectRaw("CASE WHEN COALESCE(co.total_abonado, 0) + COALESCE(aj.total_ajustado, 0) > COALESCE(v.total_deuda, 0) THEN 'SALDO_FAVOR' WHEN COALESCE(v.total_deuda, 0) = COALESCE(co.total_abonado, 0) + COALESCE(aj.total_ajustado, 0) THEN 'SALDADA' WHEN COALESCE(co.total_abonado, 0) + COALESCE(aj.total_ajustado, 0) = 0 THEN 'PENDIENTE' ELSE 'PARCIAL' END as estado")
             ->where(function (Builder $query): void {
                 $query->whereNotNull('v.cliente_id')
-                    ->orWhereNotNull('co.cliente_id');
+                    ->orWhereNotNull('co.cliente_id')
+                    ->orWhereNotNull('aj.cliente_id');
             })
             ->when($filters['cliente_id'] ?? null, fn (Builder $query, int|string $id): Builder => $query->where('c.id', $id));
 
@@ -592,19 +919,49 @@ class ReporteController extends Controller
      */
     private function supplierDebtsQuery(array $filters): Builder
     {
-        return DB::table('vw_saldos_carga_proveedor as s')
-            ->join('cargas_proveedor as c', 'c.id', '=', 's.carga_id')
-            ->join('proveedores as pr', 'pr.id', '=', 's.proveedor_id')
-            ->join('productos as p', 'p.id', '=', 'c.producto_id')
-            ->selectRaw('s.fecha_carga as fecha, s.numero_carga, pr.nombre_razon_social as proveedor, p.nombre as producto, s.peso_neto_kg, s.costo_total, s.total_pagado, s.saldo_pendiente, s.estado_pago as estado')
-            ->where('s.saldo_pendiente', '>', 0)
-            ->whereDate('s.fecha_carga', '>=', $filters['desde'])
+        $loads = DB::table('vw_saldos_carga_proveedor as s')
+            ->selectRaw('s.proveedor_id, COUNT(*) as cantidad_cargas, COALESCE(SUM(s.costo_total), 0) as total_cargas')
+            ->where('s.estado_pago', '<>', 'ANULADA')
+            ->where('s.costo_total', '>', 0)
             ->whereDate('s.fecha_carga', '<=', $filters['hasta'])
-            ->when($filters['proveedor_id'] ?? null, fn (Builder $query, int|string $id): Builder => $query->where('s.proveedor_id', $id))
-            ->when($filters['producto_id'] ?? null, fn (Builder $query, int|string $id): Builder => $query->where('c.producto_id', $id))
-            ->when(in_array($filters['estado'] ?? 'TODOS', ['PENDIENTE', 'PARCIAL'], true), fn (Builder $query): Builder => $query->where('s.estado_pago', $filters['estado']))
-            ->orderBy('s.fecha_carga')
-            ->orderBy('s.carga_id');
+            ->groupBy('s.proveedor_id');
+        $payments = DB::table('pagos_proveedor as pp')
+            ->join('cargas_proveedor as c', 'c.id', '=', 'pp.carga_id')
+            ->selectRaw('c.proveedor_id, COALESCE(SUM(pp.monto), 0) as total_pagado, COUNT(*) as cantidad_pagos, MAX(pp.pagado_at) as ultimo_pago')
+            ->whereNull('c.anulada_at')
+            ->whereNull('pp.anulada_at')
+            ->whereDate('pp.pagado_at', '<=', $filters['hasta'])
+            ->groupBy('c.proveedor_id');
+        $adjustments = DB::table('ajustes_proveedor as a')
+            ->join('cargas_proveedor as c', 'c.id', '=', 'a.carga_id')
+            ->selectRaw('c.proveedor_id, COALESCE(SUM(a.monto), 0) as total_ajustado')
+            ->whereNull('c.anulada_at')
+            ->whereNull('a.anulado_at')
+            ->whereDate('a.fecha_ajuste', '<=', $filters['hasta'])
+            ->groupBy('c.proveedor_id');
+        $balances = DB::table('proveedores as pr')
+            ->leftJoinSub($loads, 'ca', fn (JoinClause $join): JoinClause => $join->on('ca.proveedor_id', '=', 'pr.id'))
+            ->leftJoinSub($payments, 'pp', fn (JoinClause $join): JoinClause => $join->on('pp.proveedor_id', '=', 'pr.id'))
+            ->leftJoinSub($adjustments, 'aj', fn (JoinClause $join): JoinClause => $join->on('aj.proveedor_id', '=', 'pr.id'))
+            ->selectRaw('pr.id as proveedor_id, pr.nombre_razon_social as proveedor, pr.numero_cuenta')
+            ->selectRaw('COALESCE(ca.cantidad_cargas, 0) as cantidad_cargas')
+            ->selectRaw('ROUND(COALESCE(ca.total_cargas, 0), 2) as total_cargas')
+            ->selectRaw('ROUND(COALESCE(pp.total_pagado, 0), 2) as total_pagado')
+            ->selectRaw('ROUND(COALESCE(aj.total_ajustado, 0), 2) as total_ajustado')
+            ->selectRaw('ROUND(GREATEST(COALESCE(ca.total_cargas, 0) - COALESCE(pp.total_pagado, 0) - COALESCE(aj.total_ajustado, 0), 0), 2) as deuda_actual')
+            ->selectRaw('COALESCE(pp.cantidad_pagos, 0) as cantidad_pagos, pp.ultimo_pago')
+            ->selectRaw("CASE WHEN COALESCE(ca.total_cargas, 0) <= COALESCE(pp.total_pagado, 0) + COALESCE(aj.total_ajustado, 0) THEN 'SALDADA' WHEN COALESCE(pp.total_pagado, 0) + COALESCE(aj.total_ajustado, 0) = 0 THEN 'PENDIENTE' ELSE 'PARCIAL' END as estado")
+            ->whereNotNull('ca.proveedor_id')
+            ->when($filters['proveedor_id'] ?? null, fn (Builder $query, int|string $id): Builder => $query->where('pr.id', $id));
+
+        return DB::query()
+            ->fromSub($balances, 'saldo_proveedor')
+            ->when(
+                in_array($filters['estado'] ?? 'TODOS', ['PENDIENTE', 'PARCIAL', 'SALDADA'], true),
+                fn (Builder $query): Builder => $query->where('estado', $filters['estado']),
+            )
+            ->orderByDesc('deuda_actual')
+            ->orderBy('proveedor');
     }
 
     /**
@@ -687,13 +1044,13 @@ class ReporteController extends Controller
     /** @return list<array{label: string, value: int|float, format: string}> */
     private function supplierDebtsSummary(Builder $query): array
     {
-        $totals = $query->selectRaw('COUNT(*) as cargas, COALESCE(SUM(costo_total), 0) as costo, COALESCE(SUM(total_pagado), 0) as pagado, COALESCE(SUM(saldo_pendiente), 0) as saldo')->first();
+        $totals = $query->selectRaw('COUNT(*) as proveedores, COALESCE(SUM(cantidad_cargas), 0) as cargas, COALESCE(SUM(total_cargas), 0) as costo, COALESCE(SUM(total_pagado + total_ajustado), 0) as abonado, COALESCE(SUM(deuda_actual), 0) as saldo')->first();
 
         return [
+            ['label' => 'Proveedores', 'value' => (int) $totals->proveedores, 'format' => 'integer'],
             ['label' => 'Cargas', 'value' => (int) $totals->cargas, 'format' => 'integer'],
-            ['label' => 'Costo', 'value' => (float) $totals->costo, 'format' => 'money'],
-            ['label' => 'Pagado', 'value' => (float) $totals->pagado, 'format' => 'money'],
-            ['label' => 'Deuda pendiente', 'value' => (float) $totals->saldo, 'format' => 'money'],
+            ['label' => 'Pagado y ajustado', 'value' => (float) $totals->abonado, 'format' => 'money'],
+            ['label' => 'Deuda acumulada', 'value' => (float) $totals->saldo, 'format' => 'money'],
         ];
     }
 
@@ -747,5 +1104,10 @@ class ReporteController extends Controller
         $text = (string) $value;
 
         return preg_match('/^[=+\-@]/u', ltrim($text)) === 1 ? "'{$text}" : $text;
+    }
+
+    private function normalizedReportText(string $expression): string
+    {
+        return "CONVERT({$expression} USING utf8mb4) COLLATE utf8mb4_unicode_ci";
     }
 }

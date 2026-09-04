@@ -6,6 +6,8 @@ use App\Models\Permiso;
 use App\Models\Rol;
 use App\Models\TipoJaba;
 use App\Models\Usuario;
+use DOMDocument;
+use DOMElement;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Tests\TestCase;
 
@@ -48,7 +50,30 @@ class TipoJabaControllerTest extends TestCase
             ->assertSee('JABA AZUL')
             ->assertSee($dangerousDescription)
             ->assertDontSee($dangerousDescription, false)
-            ->assertDontSee('JABA ROJA');
+            ->assertDontSee('JABA ROJA')
+            ->assertSee(route('tipos-jaba.index'), false)
+            ->assertDontSee('Configuración');
+    }
+
+    public function test_index_displays_only_meaningful_tare_decimals(): void
+    {
+        $user = $this->userWithManagementPermission();
+        TipoJaba::factory()->create([
+            'nombre' => 'JABA TARA CORTA',
+            'tara_referencial_kg' => '2.400',
+        ]);
+        TipoJaba::factory()->create([
+            'nombre' => 'JABA TARA PRECISA',
+            'tara_referencial_kg' => '2.875',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('tipos-jaba.index'));
+
+        $response
+            ->assertSee('2,4')
+            ->assertSee('2,875')
+            ->assertDontSee('2.400')
+            ->assertDontSee('2.875');
     }
 
     public function test_valid_payload_creates_normalized_active_crate_type_and_records_audit(): void
@@ -146,6 +171,29 @@ class TipoJabaControllerTest extends TestCase
             'valor_anterior' => '0.000',
             'valor_nuevo' => '2.875',
         ]);
+    }
+
+    public function test_edit_form_displays_tare_without_redundant_zeroes_and_keeps_it_editable(): void
+    {
+        $user = $this->userWithManagementPermission();
+        $crateType = TipoJaba::factory()->create([
+            'tara_referencial_kg' => '6.8',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('tipos-jaba.edit', $crateType));
+        $previousInternalErrors = libxml_use_internal_errors(true);
+        $document = new DOMDocument;
+        $document->loadHTML($response->getContent());
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousInternalErrors);
+        $tareInput = $document->getElementById('tara_referencial_kg');
+
+        $response->assertSee('Editar jaba');
+        $this->assertInstanceOf(DOMElement::class, $tareInput);
+        $this->assertSame('6.8', $tareInput->getAttribute('value'));
+        $this->assertSame('0.001', $tareInput->getAttribute('step'));
+        $this->assertFalse($tareInput->hasAttribute('disabled'));
+        $this->assertFalse($tareInput->hasAttribute('readonly'));
     }
 
     private function userWithManagementPermission(): Usuario

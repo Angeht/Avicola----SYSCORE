@@ -10,6 +10,8 @@
         description="Centraliza las empresas y personas que abastecen mercadería a la operación."
         :count="$activeCount + $inactiveCount"
         count-label="Registros totales"
+        :secondary-href="auth()->user()?->tienePermiso('TIPOS_JABA_GESTIONAR') ? route('tipos-jaba.index') : null"
+        secondary-label="Jabas y taras"
         :create-href="route('proveedores.create')"
         create-label="Nuevo proveedor"
     />
@@ -23,7 +25,7 @@
         :action="route('proveedores.index')"
         :search="$search"
         :status="$status"
-        placeholder="Buscar por razón social, documento, teléfono o dirección"
+        placeholder="Buscar por razón social, documento, cuenta o teléfono"
     />
 
     <section class="reveal-up reveal-up-delay-2 mt-4 overflow-hidden border border-line bg-paper shadow-panel" aria-labelledby="suppliers-results-title">
@@ -40,7 +42,7 @@
             <div class="hidden overflow-x-auto md:block">
                 <table class="w-full min-w-[920px] border-collapse text-left" aria-label="Proveedores registrados">
                     <thead class="bg-canvas font-mono text-[9px] tracking-[0.16em] text-steel-500 uppercase">
-                        <tr><th scope="col" class="px-6 py-3 font-semibold">Proveedor</th><th scope="col" class="px-6 py-3 font-semibold">Documento</th><th scope="col" class="px-6 py-3 font-semibold">Contacto</th><th scope="col" class="px-6 py-3 font-semibold">Estado</th><th scope="col" class="px-6 py-3 text-right font-semibold">Acciones</th></tr>
+                        <tr><th scope="col" class="px-6 py-3 font-semibold">Proveedor</th><th scope="col" class="px-6 py-3 font-semibold">Documento</th><th scope="col" class="px-6 py-3 font-semibold">Cuenta / Contacto</th><th scope="col" class="px-6 py-3 font-semibold">Estado</th><th scope="col" class="px-6 py-3 text-right font-semibold">Acciones</th></tr>
                     </thead>
                     <tbody class="divide-y divide-line">
                         @foreach ($suppliers as $supplier)
@@ -53,7 +55,7 @@
                                         <span class="text-xs text-steel-500">Sin documento</span>
                                     @endif
                                 </td>
-                                <td class="px-6 py-4 text-sm text-ink-700">{{ $supplier->telefono ?: 'Sin teléfono' }}</td>
+                                <td class="px-6 py-4"><p class="font-mono text-xs font-semibold text-ink-700">{{ $supplier->numero_cuenta ?: 'Sin cuenta registrada' }}</p><p class="mt-1 text-xs text-steel-500">{{ $supplier->telefono ?: 'Sin teléfono' }}</p></td>
                                 <td class="px-6 py-4"><x-status-badge :active="$supplier->activo" /></td>
                                 <td class="px-6 py-4">
                                     <div class="flex justify-end gap-2">
@@ -73,7 +75,7 @@
                 @foreach ($suppliers as $supplier)
                     <article class="p-5">
                         <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="font-semibold text-ink-950">{{ $supplier->nombre_razon_social }}</p><p class="mt-1 font-mono text-[9px] text-steel-500 uppercase">{{ $supplier->tipoDocumento?->codigo ?: 'Sin doc.' }} {{ $supplier->nro_documento }}</p></div><x-status-badge :active="$supplier->activo" /></div>
-                        <dl class="mt-4 grid gap-2 border-t border-line pt-3 text-sm"><div class="flex gap-3"><dt class="w-20 shrink-0 text-steel-500">Teléfono</dt><dd class="text-ink-700">{{ $supplier->telefono ?: 'No registrado' }}</dd></div><div class="flex gap-3"><dt class="w-20 shrink-0 text-steel-500">Dirección</dt><dd class="text-ink-700">{{ $supplier->direccion ?: 'No registrada' }}</dd></div></dl>
+                        <dl class="mt-4 grid gap-2 border-t border-line pt-3 text-sm"><div class="flex gap-3"><dt class="w-20 shrink-0 text-steel-500">Cuenta</dt><dd class="font-mono text-ink-700">{{ $supplier->numero_cuenta ?: 'No registrada' }}</dd></div><div class="flex gap-3"><dt class="w-20 shrink-0 text-steel-500">Teléfono</dt><dd class="text-ink-700">{{ $supplier->telefono ?: 'No registrado' }}</dd></div><div class="flex gap-3"><dt class="w-20 shrink-0 text-steel-500">Dirección</dt><dd class="text-ink-700">{{ $supplier->direccion ?: 'No registrada' }}</dd></div></dl>
                         <div class="mt-4 flex gap-2">
                             <a href="{{ route('proveedores.edit', $supplier) }}" class="inline-flex min-h-10 flex-1 items-center justify-center border border-ink-950 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Editar</a>
                             @if ($supplier->activo)

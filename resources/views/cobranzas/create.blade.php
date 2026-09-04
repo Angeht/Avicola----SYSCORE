@@ -20,7 +20,7 @@
     </header>
 
     <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_380px]">
-        <form method="POST" action="{{ route('cobranzas.store') }}" data-collection-form data-has-open-cash="{{ $openCashSession ? 'true' : 'false' }}" class="reveal-up reveal-up-delay-1 border border-line bg-paper shadow-panel" novalidate>
+        <form method="POST" action="{{ route('cobranzas.store') }}" data-collection-form data-has-open-cash="{{ $openCashSession ? 'true' : 'false' }}" data-can-round="{{ $canRound ? 'true' : 'false' }}" class="reveal-up reveal-up-delay-1 border border-line bg-paper shadow-panel" novalidate>
             @csrf
 
             <div class="border-b border-line px-5 py-5 sm:px-6">
@@ -66,6 +66,13 @@
                     <textarea id="observacion" name="observacion" rows="3" maxlength="255" placeholder="Operación, referencia o detalle del pago..." class="w-full resize-y border border-line bg-white px-4 py-3 text-sm text-ink-950 outline-none transition placeholder:text-steel-300 focus:border-signal focus:ring-2 focus:ring-signal/15">{{ old('observacion') }}</textarea>
                 </x-form-field>
 
+                @if ($canRound)
+                    <section data-collection-rounding-panel class="hidden border-l-4 border-hazard bg-hazard-soft p-4" aria-label="Cierre por redondeo">
+                        <label class="flex cursor-pointer items-start gap-3"><input type="checkbox" name="cerrar_por_redondeo" value="1" data-collection-rounding @checked(old('cerrar_por_redondeo')) class="mt-1 size-4 accent-signal"><span><span class="block font-display text-sm font-bold tracking-wide text-ink-950 uppercase">Cerrar el saldo pequeño</span><span class="mt-1 block text-xs leading-5 text-ink-700">El cliente entrega <strong data-collection-rounding-cash>{{ $money($receivedAmount) }}</strong> y se registra <strong data-collection-rounding-amount>{{ $money(0) }}</strong> como redondeo. Caja conserva únicamente el efectivo real.</span></span></label>
+                        @error('cerrar_por_redondeo')<p class="mt-2 text-xs font-medium text-danger">{{ $message }}</p>@enderror
+                    </section>
+                @endif
+
                 <div data-collection-cash-requirement class="hidden border-l-4 border-danger bg-danger-soft px-4 py-3 text-sm text-danger" role="status">La cobranza en efectivo requiere una sesión de caja abierta. @if ($authenticatedUser?->tienePermiso('CAJA_ABRIR_CERRAR'))<a href="{{ route('caja.create') }}" class="font-semibold underline underline-offset-2">Abrir caja</a>@else Solicita la apertura a un responsable de caja o elige un medio no efectivo. @endif</div>
 
                 @unless ($canRegister)
@@ -79,7 +86,7 @@
         <aside class="grid content-start gap-6">
             <section class="industrial-hatch panel-cut reveal-up reveal-up-delay-2 bg-ink-950 p-6 text-white shadow-panel" aria-labelledby="collection-preview-title">
                 <p class="font-mono text-[9px] tracking-[0.2em] text-hazard uppercase">Vista previa / Cliente</p><h2 id="collection-preview-title" class="mt-2 font-display text-2xl font-bold uppercase">Resultado del pago</h2>
-                <div class="mt-6 grid gap-px border border-white/10 bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Deuda antes del pago</p><p data-collection-preview-debt class="mt-2 font-display text-2xl font-bold">{{ $money($selectedClient?->deuda_total) }}</p></div><div class="grid grid-cols-2 gap-px bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Abono</p><p data-collection-preview-payment class="mt-2 font-display text-2xl font-bold text-signal">{{ $money($receivedAmount) }}</p></div><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Restante</p><p data-collection-preview-remaining class="mt-2 font-display text-2xl font-bold text-hazard">{{ $money(max(0, (float) ($selectedClient?->deuda_total ?? 0) - (float) ($receivedAmount ?? 0))) }}</p></div></div></div>
+                <div class="mt-6 grid gap-px border border-white/10 bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Deuda antes del pago</p><p data-collection-preview-debt class="mt-2 font-display text-2xl font-bold">{{ $money($selectedClient?->deuda_total) }}</p></div><div class="grid grid-cols-2 gap-px bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Efectivo recibido</p><p data-collection-preview-payment class="mt-2 font-display text-2xl font-bold text-signal">{{ $money($receivedAmount) }}</p></div><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Restante</p><p data-collection-preview-remaining class="mt-2 font-display text-2xl font-bold text-hazard">{{ $money(max(0, (float) ($selectedClient?->deuda_total ?? 0) - (float) ($receivedAmount ?? 0))) }}</p></div></div></div>
                 <div class="mt-5 border-t border-white/10 pt-5"><p class="font-mono text-[8px] tracking-wider text-steel-300 uppercase">Cliente seleccionado</p><p data-collection-preview-client class="mt-2 font-display text-xl font-bold uppercase">{{ $selectedClient?->nombres_razon_social ?? 'Selecciona un cliente' }}</p><p data-collection-preview-message class="mt-2 text-xs leading-5 text-steel-300">Ingresa el monto recibido para calcular el saldo restante.</p></div>
             </section>
 

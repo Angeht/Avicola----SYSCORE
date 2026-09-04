@@ -37,6 +37,7 @@ class StoreCobranzaRequest extends FormRequest
                 Rule::exists('medios_pago', 'id')->where('activo', true),
             ],
             'monto_total' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
+            'cerrar_por_redondeo' => ['sometimes', 'boolean'],
             'observacion' => ['nullable', 'string', 'max:255'],
         ];
     }
@@ -74,6 +75,7 @@ class StoreCobranzaRequest extends FormRequest
             'monto_total.decimal' => 'El monto recibido puede tener hasta dos decimales.',
             'monto_total.min' => 'El monto recibido debe ser mayor que cero.',
             'monto_total.max' => 'El monto recibido supera el máximo permitido.',
+            'cerrar_por_redondeo.boolean' => 'La opción de redondeo no es válida.',
             'observacion.max' => 'La observación no puede superar los 255 caracteres.',
             'observacion.string' => 'La observación debe ser un texto válido.',
         ];
@@ -85,6 +87,7 @@ class StoreCobranzaRequest extends FormRequest
             'cliente_id' => $this->normalizeIdentifier($this->input('cliente_id')),
             'medio_pago_id' => $this->normalizeIdentifier($this->input('medio_pago_id')),
             'monto_total' => $this->normalizeMoney($this->input('monto_total')),
+            'cerrar_por_redondeo' => $this->boolean('cerrar_por_redondeo'),
             'observacion' => $this->filled('observacion')
                 ? (is_scalar($this->input('observacion'))
                     ? Str::of((string) $this->input('observacion'))->squish()->toString()

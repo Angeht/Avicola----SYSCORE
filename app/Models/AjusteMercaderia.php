@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 #[Fillable(['numero_ajuste', 'producto_id', 'tipo_ajuste_id', 'cantidad_pollos', 'peso_kg', 'motivo', 'usuario_id', 'fecha_ajuste', 'anulado_por', 'anulado_at', 'motivo_anulacion'])]
@@ -48,6 +49,16 @@ class AjusteMercaderia extends Model
             'ajuste_id',
             'conciliacion_id',
         );
+    }
+
+    public function ajusteCliente(): HasOne
+    {
+        return $this->hasOne(AjusteCliente::class, 'ajuste_mercaderia_id');
+    }
+
+    public function ajusteProveedor(): HasOne
+    {
+        return $this->hasOne(AjusteProveedor::class, 'ajuste_mercaderia_id');
     }
 
     public function estaAnulado(): bool

@@ -5,7 +5,11 @@
 
 @section('content')
     @php
-        $money = fn (float|int|string|null $value): string => 'S/ '.number_format((float) ($value ?? 0), 4, ',', '.');
+        $unitPrice = static function (float|int|string|null $value): string {
+            $formatted = number_format((float) ($value ?? 0), 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
         $currentVersion = $priceDay->versiones->first();
     @endphp
 
@@ -28,7 +32,7 @@
         <div class="industrial-hatch panel-cut bg-ink-950 p-6 text-white shadow-panel sm:p-8">
             <p class="font-mono text-[9px] tracking-[0.2em] text-hazard uppercase">Precio vigente</p>
             <div class="mt-3 flex items-end gap-3">
-                <span class="font-display text-5xl font-extrabold sm:text-6xl">{{ $currentVersion ? $money($currentVersion->precio_kg) : 'Sin precio' }}</span>
+                <span class="font-display text-5xl font-extrabold sm:text-6xl">{{ $currentVersion ? $unitPrice($currentVersion->precio_kg) : 'Sin precio' }}</span>
                 @if ($currentVersion)<span class="pb-2 text-sm text-steel-300">por kg</span>@endif
             </div>
             <p class="mt-4 text-sm text-steel-300">{{ $currentVersion ? 'Vigente desde las '.$currentVersion->vigente_desde->format('H:i:s') : 'No se encontró una versión vigente.' }}</p>
@@ -58,7 +62,7 @@
                         <p class="mt-1 font-mono text-[8px] tracking-wider text-steel-500 uppercase">{{ $version->vigente_desde->format('d.m.Y · H:i:s') }} · {{ $version->registradoPor->usuario }}</p>
                     </div>
                     <div class="sm:text-right">
-                        <p class="font-display text-3xl font-extrabold text-ink-950">{{ $money($version->precio_kg) }}</p>
+                        <p class="font-display text-3xl font-extrabold text-ink-950">{{ $unitPrice($version->precio_kg) }}</p>
                         <p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">por kilogramo</p>
                     </div>
                 </li>

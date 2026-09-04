@@ -35,7 +35,7 @@
         @if ($cliente->nro_documento)<div class="flex justify-between gap-3"><dt>Documento</dt><dd class="font-mono">{{ $cliente->nro_documento }}</dd></div>@endif
         @if ($cliente->telefono)<div class="flex justify-between gap-3"><dt>Teléfono</dt><dd class="font-mono">{{ $cliente->telefono }}</dd></div>@endif
         <div class="flex justify-between gap-3"><dt>Estado</dt><dd class="text-right font-semibold">{{ $statusLabel }}</dd></div>
-        <div class="flex justify-between gap-3"><dt>Movimientos</dt><dd class="font-mono">{{ $summary['sales_count'] + $summary['collections_count'] }}</dd></div>
+        <div class="flex justify-between gap-3"><dt>Movimientos</dt><dd class="font-mono">{{ $summary['sales_count'] + $summary['collections_count'] + $summary['adjustments_count'] }}</dd></div>
     </dl>
 
     @if ($cycleReset)
@@ -51,7 +51,7 @@
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <p class="font-mono font-bold">{{ $movement->documento }}</p>
-                            <p class="mt-0.5 text-steel-500">{{ \Illuminate\Support\Carbon::parse($movement->fecha_movimiento)->format('d/m/Y H:i') }} · {{ $movement->tipo === 'VENTA' ? 'Venta' : 'Abono' }}</p>
+                            <p class="mt-0.5 text-steel-500">{{ \Illuminate\Support\Carbon::parse($movement->fecha_movimiento)->format('d/m/Y H:i') }} · {{ $movement->tipo === 'VENTA' ? 'Venta' : ($movement->tipo === 'ABONO' ? 'Abono' : 'Ajuste') }}</p>
                         </div>
                         <p class="font-mono font-bold">{{ $movement->tipo === 'VENTA' ? '+ '.$money($movement->cargo) : '- '.$money($movement->abono) }}</p>
                     </div>
@@ -69,6 +69,7 @@
     <dl class="border-y-2 border-dashed border-ink-950 py-3 text-[11px] leading-6">
         <div class="flex justify-between"><dt>Total ventas</dt><dd class="font-mono">{{ $money($summary['total_sales']) }}</dd></div>
         <div class="flex justify-between"><dt>Total abonado</dt><dd class="font-mono">{{ $money($summary['total_collections']) }}</dd></div>
+        <div class="flex justify-between"><dt>Total ajustado</dt><dd class="font-mono">{{ $money($summary['total_adjustments']) }}</dd></div>
         <div class="flex justify-between"><dt>Saldo a favor</dt><dd class="font-mono">{{ $money($summary['credit']) }}</dd></div>
         <div class="mt-1 flex justify-between border-t border-dashed border-ink-950 pt-1"><dt class="font-bold">Restante por pagar</dt><dd class="font-mono text-base font-extrabold">{{ $money($summary['remaining']) }}</dd></div>
     </dl>

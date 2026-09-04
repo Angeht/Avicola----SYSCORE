@@ -31,9 +31,11 @@
                 <p class="mt-2 text-xs text-steel-500">Mínimo 10 y máximo 255 caracteres.</p>
             </div>
 
+            <x-confirmacion-pin-administrador :administrators="$administrators" :pin-setup-user="$pinSetupUser" operation="la anulación de la carga" class="mt-6" />
+
             <div class="mt-7 flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:justify-end">
                 <a href="{{ route('cargas-proveedor.show', $load) }}" class="inline-flex min-h-12 items-center justify-center border border-line px-5 font-display text-sm font-bold tracking-wider text-ink-700 uppercase">Cancelar</a>
-                <button type="submit" class="inline-flex min-h-12 items-center justify-center bg-danger px-6 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-950">Confirmar anulación</button>
+                <button type="submit" @disabled($administrators->isEmpty()) class="inline-flex min-h-12 items-center justify-center bg-danger px-6 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-950 disabled:cursor-not-allowed disabled:bg-steel-300">Confirmar anulación</button>
             </div>
         </form>
 

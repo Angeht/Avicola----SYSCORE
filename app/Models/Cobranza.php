@@ -48,6 +48,11 @@ class Cobranza extends Model
         return $this->hasMany(AplicacionCobranza::class, 'cobranza_id');
     }
 
+    public function ajustesRedondeo(): HasMany
+    {
+        return $this->hasMany(AjusteCliente::class, 'cobranza_id');
+    }
+
     public function estaAnulada(): bool
     {
         return $this->anulada_at !== null;

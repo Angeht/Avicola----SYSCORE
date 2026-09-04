@@ -6,16 +6,29 @@
 @section('content')
     @php
         $money = fn (float|int|string|null $value, int $decimals = 2): string => 'S/ '.number_format((float) ($value ?? 0), $decimals, ',', '.');
+        $unitPrice = static function (float|int|string|null $value): string {
+            $formatted = number_format((float) ($value ?? 0), 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
         $quantity = fn (float|int|string|null $value, int $decimals = 0): string => number_format((float) ($value ?? 0), $decimals, ',', '.');
         $isCancelled = $load->estaAnulada();
+        $hasActiveAdjustments = $load->ajustesProveedor->contains(fn ($adjustment): bool => ! $adjustment->estaAnulado());
         $canCancel = ! $isCancelled
             && ! $hasActivePayments
+            && ! $hasActiveAdjustments
             && $authenticatedUser?->tienePermiso('CARGAS_ANULAR');
         $canAddWeighings = ! $isCancelled
             && ! $hasActivePayments
+            && ! $hasActiveAdjustments
             && $authenticatedUser?->tienePermiso('CARGAS_REGISTRAR');
+        $hasActiveReturns = $load->ajustesProveedor->contains(fn ($adjustment): bool => ! $adjustment->estaAnulado() && $adjustment->tipo === 'DEVOLUCION');
         $canEditWeighings = ! $isCancelled
+            && ! $hasActiveReturns
             && $authenticatedUser?->tienePermiso('CARGAS_REGISTRAR');
+        $canAdjust = ! $isCancelled
+            && $balance->saldo_pendiente > 0
+            && $authenticatedUser?->tienePermiso('PROVEEDORES_AJUSTAR');
         $paymentLabel = match ($balance->estado_pago) {
             'ANULADA' => 'Carga anulada',
             'SIN_PESAJES' => 'Pendiente de pesajes',
@@ -40,9 +53,12 @@
             <h1 class="mt-3 font-display text-4xl leading-none font-extrabold tracking-tight text-ink-950 uppercase sm:text-5xl">Detalle de carga</h1>
             <p class="mt-3 max-w-2xl text-sm leading-6 text-steel-500">{{ $load->producto->nombre }} recibido de {{ $load->proveedor->nombre_razon_social }} el {{ $load->fecha_carga->translatedFormat('d \d\e F \d\e Y') }}.</p>
         </div>
-        <div class="flex flex-col gap-3 sm:flex-row">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
             @if ($canAddWeighings)
                 <a href="{{ route('cargas-proveedor.pesajes.create', $load) }}" class="inline-flex min-h-12 items-center justify-center bg-hazard px-5 font-display text-sm font-bold tracking-wider text-ink-950 uppercase transition hover:bg-hazard-soft">Registrar pesajes</a>
+            @endif
+            @if ($canAdjust)
+                <a href="{{ route('cargas-proveedor.ajustes.create', $load) }}" class="inline-flex min-h-12 items-center justify-center border border-signal px-5 font-display text-sm font-bold tracking-wider text-signal uppercase transition hover:bg-signal hover:text-white">Agregar ajuste</a>
             @endif
             @if ($canCancel)
                 <a href="{{ route('cargas-proveedor.anulacion.create', $load) }}" class="inline-flex min-h-12 items-center justify-center border border-danger px-5 font-display text-sm font-bold tracking-wider text-danger uppercase transition hover:bg-danger hover:text-white">Anular carga</a>
@@ -54,7 +70,7 @@
     <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen de la carga">
         <div class="border-l-4 border-signal bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-signal uppercase">Peso neto recibido</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $quantity($summary->peso_neto_kg, 3) }} kg</p><p class="mt-1 text-xs text-steel-500">Bruto {{ $quantity($summary->peso_bruto_kg, 3) }} kg</p></div>
         <div class="border-l-4 border-hazard bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Aves recibidas</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $quantity($summary->cantidad_pollos) }}</p><p class="mt-1 text-xs text-steel-500">En {{ $load->pesajes->count() }} pesaje(s)</p></div>
-        <div class="border-l-4 border-steel-300 bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Costo por kg</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $money($load->costo_kg, 4) }}</p><p class="mt-1 text-xs text-steel-500">Valor autorizado para el cálculo</p></div>
+        <div class="border-l-4 border-steel-300 bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Costo por kg</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $unitPrice($load->costo_kg) }}</p><p class="mt-1 text-xs text-steel-500">Valor autorizado para el cálculo</p></div>
         <div class="industrial-hatch border-l-4 {{ $isCancelled ? 'border-danger' : 'border-hazard' }} bg-ink-950 p-5 text-white shadow-sm"><p class="font-mono text-[8px] tracking-wider {{ $isCancelled ? 'text-danger' : 'text-hazard' }} uppercase">Costo total calculado</p><p class="mt-2 font-display text-3xl font-extrabold {{ $isCancelled ? 'line-through opacity-60' : '' }}">{{ $money($load->costo_total) }}</p><p class="mt-1 text-xs text-steel-300">{{ $load->pesajes->isEmpty() ? 'Pendiente de registrar pesajes' : 'Saldo '.$money($balance->saldo_pendiente) }}</p></div>
     </section>
 
@@ -113,7 +129,10 @@
                 <section class="border-l-4 border-danger bg-danger-soft p-5" aria-labelledby="load-cancellation-title">
                     <p class="font-mono text-[9px] font-semibold tracking-wider text-danger uppercase">Anulación registrada</p>
                     <h2 id="load-cancellation-title" class="mt-2 font-display text-xl font-bold text-ink-950 uppercase">{{ $load->anulada_at->format('d/m/Y · H:i:s') }}</h2>
-                    <p class="mt-2 text-sm text-ink-700">Por {{ $load->anuladaPor?->nombreCompleto() ?? 'Usuario no disponible' }}.</p>
+                    <p class="mt-2 text-sm text-ink-700">Anulada por {{ $load->anuladaPor?->nombreCompleto() ?? 'Usuario no disponible' }}.</p>
+                    @if ($load->anulacionAutorizadaPor)
+                        <p class="mt-1 text-sm text-ink-700">Autorizada con PIN por {{ $load->anulacionAutorizadaPor->nombreCompleto() }}.</p>
+                    @endif
                     <p class="mt-4 border-t border-danger/20 pt-4 text-sm leading-6 text-ink-700">{{ $load->motivo_anulacion }}</p>
                 </section>
             @elseif ($hasActivePayments && $authenticatedUser?->tienePermiso('CARGAS_ANULAR'))
@@ -123,7 +142,7 @@
             <section class="industrial-hatch panel-cut reveal-up reveal-up-delay-3 bg-ink-950 p-6 text-white shadow-panel" aria-labelledby="payment-state-title">
                 <p class="font-mono text-[9px] tracking-[0.2em] text-hazard uppercase">Cuenta por pagar</p>
                 <h2 id="payment-state-title" class="mt-2 font-display text-2xl font-bold uppercase">{{ $paymentLabel }}</h2>
-                <div class="mt-5 grid grid-cols-2 gap-px border border-white/10 bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Pagado</p><p class="mt-2 font-display text-xl font-bold">{{ $money($balance->total_pagado) }}</p></div><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-hazard uppercase">Pendiente</p><p class="mt-2 font-display text-xl font-bold text-hazard">{{ $money($balance->saldo_pendiente) }}</p></div></div>
+                <div class="mt-5 grid grid-cols-3 gap-px border border-white/10 bg-white/10"><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-steel-300 uppercase">Pagado</p><p class="mt-2 font-display text-xl font-bold">{{ $money($balance->total_pagado) }}</p></div><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-signal uppercase">Ajustado</p><p class="mt-2 font-display text-xl font-bold text-signal">{{ $money($balance->total_ajustado) }}</p></div><div class="bg-ink-950 p-4"><p class="font-mono text-[8px] text-hazard uppercase">Pendiente</p><p class="mt-2 font-display text-xl font-bold text-hazard">{{ $money($balance->saldo_pendiente) }}</p></div></div>
                 @if (! $isCancelled && (float) $balance->saldo_pendiente > 0 && $authenticatedUser?->tienePermiso('PROVEEDORES_PAGAR'))
                     <a href="{{ route('pagos-proveedor.create', ['carga' => $load->id]) }}" class="mt-5 inline-flex min-h-11 w-full items-center justify-center bg-hazard font-display text-sm font-bold tracking-wider text-ink-950 uppercase transition hover:bg-white">Registrar abono</a>
                 @else
@@ -155,6 +174,15 @@
                     <article class="p-5"><div class="flex items-start justify-between gap-4"><div><p class="font-mono text-xs font-semibold text-ink-950">{{ $payment->numero_pago }}</p><p class="mt-1 text-xs text-steel-500">{{ $payment->pagado_at->format('d/m/Y · H:i') }} · {{ $payment->medioPago->nombre }}</p></div><span class="shrink-0 border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $payment->estaAnulado() ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $payment->estaAnulado() ? 'Anulado' : 'Vigente' }}</span></div><p class="mt-4 border-y border-line py-4 font-display text-3xl font-extrabold {{ $payment->estaAnulado() ? 'text-steel-500 line-through' : 'text-ink-950' }}">{{ $money($payment->monto) }}</p>@if ($authenticatedUser?->tieneAlgunPermiso(['PROVEEDORES_PAGAR', 'PROVEEDORES_PAGO_ANULAR']))<a href="{{ route('pagos-proveedor.show', $payment) }}" class="mt-4 inline-flex min-h-10 w-full items-center justify-center border border-ink-950 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Ver detalle</a>@endif</article>
                 @endforeach
             </div>
+        @endif
+    </section>
+
+    <section class="reveal-up reveal-up-delay-3 mt-6 overflow-hidden border border-line bg-paper shadow-panel" aria-labelledby="provider-adjustments-title">
+        <div class="flex flex-col gap-4 border-b border-line px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6"><div><p class="font-mono text-[9px] font-semibold tracking-[0.18em] text-signal uppercase">Proveedor / Historial</p><h2 id="provider-adjustments-title" class="mt-1 font-display text-2xl font-bold text-ink-950 uppercase">Descuentos y devoluciones</h2></div>@if ($canAdjust)<a href="{{ route('cargas-proveedor.ajustes.create', $load) }}" class="inline-flex min-h-10 items-center justify-center border border-signal px-4 font-mono text-[9px] font-semibold tracking-wider text-signal uppercase transition hover:bg-signal hover:text-white">Agregar ajuste</a>@endif</div>
+        @if ($load->ajustesProveedor->isEmpty())
+            <x-empty-state title="Sin ajustes comerciales" description="Los descuentos y devoluciones reconocidos por el proveedor aparecerán aquí." />
+        @else
+            <div class="divide-y divide-line">@foreach ($load->ajustesProveedor as $adjustment)<article class="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-6"><div><div class="flex flex-wrap items-center gap-2"><span class="border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $adjustment->estaAnulado() ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $adjustment->estaAnulado() ? 'Anulado' : $adjustment->tipo }}</span><span class="font-mono text-xs font-semibold text-ink-950">{{ $adjustment->numero_ajuste }}</span></div><p class="mt-2 text-sm text-ink-700">{{ $adjustment->motivo }}</p><p class="mt-1 text-xs text-steel-500">{{ $adjustment->fecha_ajuste->format('d/m/Y H:i') }} · {{ $adjustment->usuario->nombreCompleto() }}@if ($adjustment->ajusteMercaderia) · {{ $quantity($adjustment->ajusteMercaderia->cantidad_pollos) }} aves / {{ $quantity($adjustment->ajusteMercaderia->peso_kg, 3) }} kg @endif</p></div><div class="text-left sm:text-right"><p class="font-display text-2xl font-bold {{ $adjustment->estaAnulado() ? 'text-steel-500 line-through' : 'text-signal' }}">− {{ $money($adjustment->monto) }}</p>@if (! $adjustment->estaAnulado() && $authenticatedUser?->tienePermiso('PROVEEDORES_AJUSTAR'))<a href="{{ route('cargas-proveedor.ajustes.anulacion.create', [$load, $adjustment]) }}" class="mt-2 inline-flex font-mono text-[9px] font-semibold tracking-wider text-danger uppercase underline underline-offset-4">Anular</a>@endif</div></article>@endforeach</div>
         @endif
     </section>
 @endsection

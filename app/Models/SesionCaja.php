@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['usuario_id', 'fecha_operacion', 'apertura_at', 'cierre_at', 'cerrada_por', 'monto_apertura', 'monto_contado_efectivo', 'observacion_cierre'])]
+#[Fillable(['usuario_id', 'fecha_operacion', 'apertura_at', 'apertura_autorizada_por', 'cierre_at', 'cerrada_por', 'cierre_autorizada_por', 'monto_apertura', 'monto_contado_efectivo', 'observacion_cierre'])]
 class SesionCaja extends Model
 {
     /** @use HasFactory<SesionCajaFactory> */
@@ -29,6 +29,16 @@ class SesionCaja extends Model
     public function cerradaPor(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'cerrada_por');
+    }
+
+    public function aperturaAutorizadaPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'apertura_autorizada_por');
+    }
+
+    public function cierreAutorizadaPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'cierre_autorizada_por');
     }
 
     public function pagosProveedor(): HasMany

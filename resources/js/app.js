@@ -143,9 +143,10 @@ document.querySelectorAll('[data-load-form]').forEach((form) => {
     };
 
     const formatKilograms = (value) => `${value.toLocaleString('es-PE', {
-        minimumFractionDigits: 3,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 3,
     })} kg`;
+    const formatTareInput = (value) => value.toFixed(3).replace(/\.?0+$/, '');
     const formatMoney = (value) => `S/ ${value.toLocaleString('es-PE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
@@ -230,13 +231,6 @@ document.querySelectorAll('[data-load-form]').forEach((form) => {
             return;
         }
 
-        const selectedCrateType = crateTypeSelect.options[crateTypeSelect.selectedIndex];
-        const referenceTare = numberValue(selectedCrateType?.getAttribute('data-reference-tare'));
-
-        if (crateTypeSelect.value !== '' && numberValue(tareInput.value) === 0 && referenceTare > 0) {
-            tareInput.value = referenceTare.toFixed(3);
-        }
-
         const crates = Math.max(0, Math.trunc(numberValue(cratesInput.value)));
         const grossWeight = numberValue(row.querySelector('[data-gross-weight]')?.value);
         const tare = numberValue(tareInput.value);
@@ -271,8 +265,8 @@ document.querySelectorAll('[data-load-form]').forEach((form) => {
 
         if (tareInput instanceof HTMLInputElement) {
             tareInput.value = target.value !== ''
-                ? referenceTare.toFixed(3)
-                : '0.000';
+                ? formatTareInput(referenceTare)
+                : '0';
         }
     };
 
@@ -291,6 +285,17 @@ document.querySelectorAll('[data-load-form]').forEach((form) => {
         }
 
         applyReferenceTare(event.target, row);
+        synchronizeRow(row);
+    });
+
+    weighingsContainer.addEventListener('focusout', (event) => {
+        const row = weighingRowFromEvent(event);
+
+        if (!(event.target instanceof HTMLInputElement) || !event.target.matches('[data-tare]') || event.target.value.trim() === '') {
+            return;
+        }
+
+        event.target.value = formatTareInput(numberValue(event.target.value));
         synchronizeRow(row);
     });
 
@@ -358,9 +363,10 @@ document.querySelectorAll('[data-edit-weighing-form]').forEach((form) => {
         return Number.isNaN(parsedValue) ? 0 : parsedValue;
     };
     const formatKilograms = (value) => `${value.toLocaleString('es-PE', {
-        minimumFractionDigits: 3,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 3,
     })} kg`;
+    const formatTareInput = (value) => value.toFixed(3).replace(/\.?0+$/, '');
 
     const synchronizePreview = () => {
         const crates = Math.max(0, Math.trunc(numberValue(cratesInput.value)));
@@ -382,26 +388,41 @@ document.querySelectorAll('[data-edit-weighing-form]').forEach((form) => {
         const selectedOption = crateTypeSelect.options[crateTypeSelect.selectedIndex];
         const referenceTare = numberValue(selectedOption?.dataset.referenceTare);
 
-        tareInput.value = crateTypeSelect.value === '' ? '0.000' : referenceTare.toFixed(3);
+        tareInput.value = crateTypeSelect.value === '' ? '0' : formatTareInput(referenceTare);
         synchronizePreview();
     });
     [cratesInput, tareInput, grossWeightInput].forEach((input) => input.addEventListener('input', synchronizePreview));
+    tareInput.addEventListener('blur', () => {
+        if (tareInput.value.trim() !== '') {
+            tareInput.value = formatTareInput(numberValue(tareInput.value));
+            synchronizePreview();
+        }
+    });
     synchronizePreview();
 });
 
 document.querySelectorAll('[data-provider-payment-form]').forEach((form) => {
-    const loadSelect = form.querySelector('[data-payment-load]');
+    const providerSelect = form.querySelector('[data-payment-provider]');
     const paymentMethodSelect = form.querySelector('[data-payment-method]');
     const amountInput = form.querySelector('[data-payment-amount]');
     const fullBalanceButton = form.querySelector('[data-use-full-balance]');
     const cashRequirement = form.querySelector('[data-cash-requirement]');
-    const previewLoad = document.querySelector('[data-preview-load]');
     const previewProvider = document.querySelector('[data-preview-provider]');
-    const previewProduct = document.querySelector('[data-preview-product]');
+    const previewLoads = document.querySelector('[data-preview-loads]');
+    const previewAccount = document.querySelector('[data-preview-account]');
     const previewBalance = document.querySelector('[data-preview-balance]');
     const previewRemaining = document.querySelector('[data-preview-remaining]');
+    const providerLoadRows = form.querySelectorAll('[data-provider-load-row]');
+    const providerLoadCount = form.querySelector('[data-provider-load-count]');
+    const providerLoadsEmpty = form.querySelector('[data-provider-loads-empty]');
+    const discountToggle = form.querySelector('[data-provider-discount-toggle]');
+    const discountFields = form.querySelector('[data-provider-discount-fields]');
+    const discountAmountInput = form.querySelector('[data-provider-discount-amount]');
+    const discountReasonInput = form.querySelector('[data-provider-discount-reason]');
+    const discountPreview = document.querySelector('[data-provider-discount-preview]');
+    const discountPreviewAmount = document.querySelector('[data-provider-discount-preview-amount]');
 
-    if (!(loadSelect instanceof HTMLSelectElement) || !(paymentMethodSelect instanceof HTMLSelectElement) || !(amountInput instanceof HTMLInputElement)) {
+    if (!(providerSelect instanceof HTMLSelectElement) || !(paymentMethodSelect instanceof HTMLSelectElement) || !(amountInput instanceof HTMLInputElement)) {
         return;
     }
 
@@ -416,27 +437,43 @@ document.querySelectorAll('[data-provider-payment-form]').forEach((form) => {
     })}`;
 
     const synchronizePayment = () => {
-        const selectedLoad = loadSelect.options[loadSelect.selectedIndex];
+        const selectedProvider = providerSelect.options[providerSelect.selectedIndex];
         const selectedMethod = paymentMethodSelect.options[paymentMethodSelect.selectedIndex];
-        const balance = numberValue(selectedLoad?.dataset.balance);
+        const balance = numberValue(selectedProvider?.dataset.balance);
         const amount = Math.max(0, numberValue(amountInput.value));
-        const remaining = Math.round((balance - amount) * 100) / 100;
-        const hasLoad = loadSelect.value !== '';
+        const hasDiscount = discountToggle instanceof HTMLInputElement && discountToggle.checked;
+        const discount = hasDiscount ? Math.max(0, numberValue(discountAmountInput?.value)) : 0;
+        const remaining = Math.round((balance - amount - discount) * 100) / 100;
+        const hasProvider = providerSelect.value !== '';
         const isCash = selectedMethod?.dataset.cash === 'true';
         const hasOpenCash = form.dataset.hasOpenCash === 'true';
 
-        amountInput.max = hasLoad ? balance.toFixed(2) : '999999999999.99';
-
-        if (previewLoad instanceof HTMLElement) {
-            previewLoad.textContent = hasLoad ? selectedLoad.dataset.number || 'Carga seleccionada' : 'Selecciona una carga';
+        amountInput.max = hasProvider ? Math.max(0, balance - discount).toFixed(2) : '999999999999.99';
+        if (discountAmountInput instanceof HTMLInputElement) {
+            discountAmountInput.max = hasProvider ? Math.max(0, balance - amount).toFixed(2) : '999999999999.99';
+            discountAmountInput.disabled = !hasDiscount;
+            discountAmountInput.required = hasDiscount;
         }
+        if (discountReasonInput instanceof HTMLInputElement) {
+            discountReasonInput.disabled = !hasDiscount;
+            discountReasonInput.required = hasDiscount;
+        }
+        discountFields?.classList.toggle('hidden', !hasDiscount);
+        discountPreview?.classList.toggle('hidden', !hasDiscount);
+        discountPreviewAmount?.replaceChildren(formatMoney(discount));
 
         if (previewProvider instanceof HTMLElement) {
-            previewProvider.textContent = hasLoad ? selectedLoad.dataset.provider || 'Proveedor no disponible' : 'Aquí verás el proveedor y el saldo actualizado.';
+            previewProvider.textContent = hasProvider ? selectedProvider.dataset.name || 'Proveedor seleccionado' : 'Selecciona un proveedor';
         }
 
-        if (previewProduct instanceof HTMLElement) {
-            previewProduct.textContent = hasLoad ? selectedLoad.dataset.product || '—' : '—';
+        if (previewLoads instanceof HTMLElement) {
+            previewLoads.textContent = hasProvider ? `${selectedProvider.dataset.loads || '0'} pendiente(s)` : '—';
+        }
+
+        if (previewAccount instanceof HTMLElement) {
+            previewAccount.textContent = hasProvider && selectedProvider.dataset.account
+                ? selectedProvider.dataset.account
+                : 'No registrada';
         }
 
         if (previewBalance instanceof HTMLElement) {
@@ -449,22 +486,37 @@ document.querySelectorAll('[data-provider-payment-form]').forEach((form) => {
             previewRemaining.classList.toggle('text-hazard', remaining >= 0);
         }
 
+        let visibleLoads = 0;
+        providerLoadRows.forEach((row) => {
+            const isVisible = hasProvider && row.getAttribute('data-provider-id') === providerSelect.value;
+
+            row.classList.toggle('hidden', !isVisible);
+            visibleLoads += isVisible ? 1 : 0;
+        });
+        providerLoadCount?.replaceChildren(`${visibleLoads} ${visibleLoads === 1 ? 'carga' : 'cargas'}`);
+        providerLoadsEmpty?.classList.toggle('hidden', visibleLoads > 0);
+
         cashRequirement?.classList.toggle('hidden', !isCash || hasOpenCash);
     };
 
-    loadSelect.addEventListener('change', synchronizePayment);
+    providerSelect.addEventListener('change', synchronizePayment);
     paymentMethodSelect.addEventListener('change', synchronizePayment);
     amountInput.addEventListener('input', synchronizePayment);
+    discountToggle?.addEventListener('change', synchronizePayment);
+    discountAmountInput?.addEventListener('input', synchronizePayment);
     fullBalanceButton?.addEventListener('click', () => {
-        const selectedLoad = loadSelect.options[loadSelect.selectedIndex];
+        const selectedProvider = providerSelect.options[providerSelect.selectedIndex];
 
-        if (loadSelect.value === '') {
-            loadSelect.focus();
+        if (providerSelect.value === '') {
+            providerSelect.focus();
 
             return;
         }
 
-        amountInput.value = numberValue(selectedLoad?.dataset.balance).toFixed(2);
+        const discount = discountToggle instanceof HTMLInputElement && discountToggle.checked
+            ? Math.max(0, numberValue(discountAmountInput?.value))
+            : 0;
+        amountInput.value = Math.max(0, numberValue(selectedProvider?.dataset.balance) - discount).toFixed(2);
         amountInput.focus();
         synchronizePayment();
     });
@@ -493,6 +545,7 @@ document.querySelectorAll('[data-sale-form]').forEach((form) => {
     };
     const formatKilograms = (value) => `${value.toLocaleString('es-PE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} kg`;
     const formatMoney = (value) => `S/ ${value.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const formatUnitPriceInput = (value) => numberValue(value).toFixed(4).replace(/0{1,2}$/, '');
     const detailIndex = (detail) => detail.querySelector('[data-sale-product]')?.name.match(/^detalles\[([^\]]+)\]/)?.[1] ?? '0';
     const weighingIndex = (weighing) => weighing.querySelector('[data-sale-crates]')?.name.match(/\[pesajes\]\[([^\]]+)\]/)?.[1] ?? '0';
     const detailSaleMode = (detail) => {
@@ -695,10 +748,6 @@ document.querySelectorAll('[data-sale-form]').forEach((form) => {
             const selectedOption = productSelect.options[productSelect.selectedIndex];
             const referencePrice = numberValue(selectedOption?.dataset.price);
 
-            if (priceInput.value === '' && productSelect.value !== '') {
-                priceInput.value = referencePrice.toFixed(4);
-            }
-
             const hasAdjustment = productSelect.value !== '' && Math.round(numberValue(priceInput.value) * 10000) !== Math.round(referencePrice * 10000);
 
             reasonPanel?.classList.toggle('hidden', !canEditPrice || !hasAdjustment);
@@ -713,7 +762,7 @@ document.querySelectorAll('[data-sale-form]').forEach((form) => {
 
         productSelect.addEventListener('change', () => {
             const referencePrice = numberValue(productSelect.options[productSelect.selectedIndex]?.dataset.price);
-            priceInput.value = productSelect.value === '' ? '' : referencePrice.toFixed(4);
+            priceInput.value = productSelect.value === '' ? '' : formatUnitPriceInput(referencePrice);
             weighingsContainer.querySelectorAll('[data-sale-weighing]').forEach((weighing) => {
                 weighing.dispatchEvent(new Event('sale-product-changed'));
             });
@@ -788,6 +837,10 @@ document.querySelectorAll('[data-collection-form]').forEach((form) => {
     const previewRemaining = document.querySelector('[data-collection-preview-remaining]');
     const previewClient = document.querySelector('[data-collection-preview-client]');
     const previewMessage = document.querySelector('[data-collection-preview-message]');
+    const roundingPanel = form.querySelector('[data-collection-rounding-panel]');
+    const roundingInput = form.querySelector('[data-collection-rounding]');
+    const roundingCashOutput = form.querySelector('[data-collection-rounding-cash]');
+    const roundingAmountOutput = form.querySelector('[data-collection-rounding-amount]');
 
     if (!(clientSelect instanceof HTMLSelectElement)
         || !(paymentMethodSelect instanceof HTMLSelectElement)
@@ -814,6 +867,9 @@ document.querySelectorAll('[data-collection-form]').forEach((form) => {
         const remaining = Math.round((debt - payment) * 100) / 100;
         const selectedMethod = paymentMethodSelect.options[paymentMethodSelect.selectedIndex];
         const isCash = selectedMethod?.dataset.cash === 'true';
+        const canRound = form.dataset.canRound === 'true';
+        const roundingAvailable = canRound && isCash && remaining >= 0.01 && remaining <= 0.10;
+        const roundsBalance = roundingAvailable && roundingInput instanceof HTMLInputElement && roundingInput.checked;
 
         totalInput.max = clientSelect.value === '' ? '999999999999.99' : debt.toFixed(2);
         useClientDebtButton.disabled = clientSelect.value === '' || debt <= 0;
@@ -821,10 +877,21 @@ document.querySelectorAll('[data-collection-form]').forEach((form) => {
         pendingSalesOutput?.replaceChildren(Math.trunc(pendingSales).toLocaleString('es-PE'));
         previewDebt?.replaceChildren(formatMoney(debt));
         previewPayment?.replaceChildren(formatMoney(payment));
-        previewRemaining?.replaceChildren(formatMoney(Math.max(0, remaining)));
+        previewRemaining?.replaceChildren(formatMoney(roundsBalance ? 0 : Math.max(0, remaining)));
         previewRemaining?.classList.toggle('text-danger', remaining < 0);
         previewRemaining?.classList.toggle('text-hazard', remaining >= 0);
         previewClient?.replaceChildren(clientSelect.value === '' ? 'Selecciona un cliente' : selectedClient.textContent.split(' · ')[0]);
+        roundingPanel?.classList.toggle('hidden', !roundingAvailable);
+        roundingCashOutput?.replaceChildren(formatMoney(payment));
+        roundingAmountOutput?.replaceChildren(formatMoney(Math.max(0, remaining)));
+
+        if (roundingInput instanceof HTMLInputElement) {
+            roundingInput.disabled = !roundingAvailable;
+
+            if (!roundingAvailable) {
+                roundingInput.checked = false;
+            }
+        }
 
         if (previewMessage instanceof HTMLElement) {
             previewMessage.textContent = clientSelect.value === ''
@@ -833,7 +900,9 @@ document.querySelectorAll('[data-collection-form]').forEach((form) => {
                     ? 'El monto recibido supera la deuda actual del cliente.'
                     : payment === 0
                         ? 'Ingresa el monto recibido para calcular el saldo restante.'
-                        : remaining === 0
+                        : roundsBalance
+                            ? `Se recibirán ${formatMoney(payment)} y ${formatMoney(remaining)} cerrarán la cuenta como redondeo.`
+                            : remaining === 0
                             ? 'Este pago cancelará toda la deuda del cliente.'
                             : `Después del abono quedarán ${formatMoney(remaining)} pendientes.`;
             previewMessage.classList.toggle('text-danger', remaining < 0);
@@ -866,8 +935,74 @@ document.querySelectorAll('[data-collection-form]').forEach((form) => {
     });
     paymentMethodSelect.addEventListener('change', synchronizeAll);
     totalInput.addEventListener('input', synchronizeAll);
+    roundingInput?.addEventListener('change', synchronizeAll);
 
     synchronizeAll();
+});
+
+document.querySelectorAll('[data-commercial-adjustment-form]').forEach((form) => {
+    const typeSelect = form.querySelector('[data-commercial-adjustment-type]');
+    const discountFields = form.querySelector('[data-commercial-discount-fields]');
+    const discountInputs = discountFields?.querySelectorAll('input, select, textarea') || [];
+    const newBalanceInput = form.querySelector('[data-commercial-new-balance]');
+    const returnFields = form.querySelector('[data-commercial-return-fields]');
+    const returnInputs = returnFields?.querySelectorAll('input, select, textarea') || [];
+    const returnProduct = form.querySelector('[data-commercial-return-product]');
+    const returnKilograms = form.querySelector('[data-commercial-return-kilograms]');
+    const previewAmount = document.querySelector('[data-commercial-preview-amount]');
+    const previewRemaining = document.querySelector('[data-commercial-preview-remaining]');
+
+    if (!(typeSelect instanceof HTMLSelectElement) || !(newBalanceInput instanceof HTMLInputElement)) {
+        return;
+    }
+
+    const numberValue = (value) => {
+        const parsedValue = Number.parseFloat(String(value || '0').replace(',', '.'));
+
+        return Number.isNaN(parsedValue) ? 0 : parsedValue;
+    };
+    const formatMoney = (value) => `S/ ${value.toLocaleString('es-PE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    })}`;
+
+    const synchronizeAdjustment = () => {
+        const isReturn = typeSelect.value === 'DEVOLUCION';
+        const balance = numberValue(form.dataset.balance);
+        const hasNewBalance = newBalanceInput.value.trim() !== '';
+        const selectedReturnProduct = returnProduct instanceof HTMLSelectElement
+            ? returnProduct.options[returnProduct.selectedIndex]
+            : null;
+        const returnUnitPrice = numberValue(selectedReturnProduct?.dataset.unitPrice || form.dataset.returnUnitPrice);
+        const returnWeight = returnKilograms instanceof HTMLInputElement
+            ? Math.max(0, numberValue(returnKilograms.value))
+            : 0;
+        const amount = isReturn
+            ? Math.round((returnWeight * returnUnitPrice) * 100) / 100
+            : hasNewBalance
+                ? Math.max(0, Math.round((balance - numberValue(newBalanceInput.value)) * 100) / 100)
+                : 0;
+        const remaining = Math.round((balance - amount) * 100) / 100;
+
+        discountFields?.classList.toggle('hidden', isReturn);
+        discountInputs.forEach((input) => {
+            input.disabled = isReturn;
+        });
+        returnFields?.classList.toggle('hidden', !isReturn);
+        returnInputs.forEach((input) => {
+            input.disabled = !isReturn;
+        });
+        previewAmount?.replaceChildren(formatMoney(amount));
+        previewRemaining?.replaceChildren(formatMoney(Math.max(0, remaining)));
+        previewRemaining?.classList.toggle('text-danger', remaining < 0);
+        previewRemaining?.classList.toggle('text-hazard', remaining >= 0);
+    };
+
+    typeSelect.addEventListener('change', synchronizeAdjustment);
+    newBalanceInput.addEventListener('input', synchronizeAdjustment);
+    returnProduct?.addEventListener('change', synchronizeAdjustment);
+    returnKilograms?.addEventListener('input', synchronizeAdjustment);
+    synchronizeAdjustment();
 });
 
 document.querySelectorAll('[data-adjustment-form]').forEach((form) => {

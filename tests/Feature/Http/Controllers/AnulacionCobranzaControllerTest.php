@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http\Controllers;
 
+use App\Models\AjusteCliente;
 use App\Models\Cliente;
 use App\Models\Cobranza;
 use App\Models\MedioPago;
@@ -135,6 +136,39 @@ class AnulacionCobranzaControllerTest extends TestCase
 
         $response->assertSessionHasErrors([
             'motivo_anulacion' => 'Esta cobranza ya fue anulada.',
+        ]);
+    }
+
+    public function test_cancelling_collection_also_cancels_its_rounding_adjustment(): void
+    {
+        $user = $this->userWithPermission();
+        $client = Cliente::factory()->create();
+        $sale = Venta::factory()->conTotal(100)->create(['cliente_id' => $client->id]);
+        $collection = Cobranza::factory()->create([
+            'cliente_id' => $client->id,
+            'usuario_id' => $user->id,
+            'monto_total' => 99.95,
+        ]);
+        $collection->aplicaciones()->create([
+            'venta_id' => $sale->id,
+            'monto_aplicado' => 99.95,
+        ]);
+        $rounding = AjusteCliente::factory()->create([
+            'venta_id' => $sale->id,
+            'cobranza_id' => $collection->id,
+            'tipo' => 'REDONDEO',
+            'monto' => 0.05,
+            'usuario_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)->post(route('cobranzas.anulacion.store', $collection), [
+            'motivo_anulacion' => 'Cobranza registrada en el cliente equivocado.',
+        ])->assertRedirect(route('cobranzas.show', $collection));
+
+        $this->assertNotNull($rounding->fresh()->anulado_at);
+        $this->assertDatabaseHas('vw_saldos_venta', [
+            'venta_id' => $sale->id,
+            'saldo_pendiente' => 100.00,
         ]);
     }
 

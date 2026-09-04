@@ -7,6 +7,7 @@ paths:
   - 'app/Http/Controllers/*Respaldo*.php'
   - 'app/Http/Controllers/*CargaController.php'
   - 'app/Http/Controllers/**'
+  - app/Http/Controllers/ReporteController.php
 ---
 
 # Controllers
@@ -31,3 +32,6 @@ Las cargas de proveedor se crean primero con costo_kg y costo_total en cero. Los
 
 ## Historiales operativos abren en la jornada actual
 Los índices de operaciones muestran la fecha actual cuando no se envía un filtro de fecha. Una fecha válida consulta esa jornada y una fecha enviada explícitamente vacía permite consultar todo el historial.
+
+## Normalizar collation en historiales unidos
+La base heredada mezcla utf8mb4_0900_ai_ci en tablas operativas con utf8mb4_unicode_ci en ajustes. Todo campo textual proyectado por UNION/UNION ALL en ReporteController debe convertirse explícitamente a utf8mb4 y COLLATE utf8mb4_unicode_ci para evitar el error MySQL 1271.

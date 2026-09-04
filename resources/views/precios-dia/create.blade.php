@@ -26,10 +26,10 @@
                         <input id="fecha" name="fecha" value="{{ old('fecha', today()->toDateString()) }}" type="date" readonly class="min-h-12 w-full border border-line bg-canvas px-4 text-sm text-ink-700 outline-none" aria-describedby="@error('fecha') fecha-error @enderror">
                     </x-form-field>
 
-                    <x-form-field name="precio_kg" label="Precio por kilogramo" hint="Hasta 4 decimales" required>
+                    <x-form-field name="precio_kg" label="Precio por kilogramo" hint="Usa 2 decimales; admite hasta 4 si los necesitas" required>
                         <div class="flex min-h-12 border border-line bg-white transition focus-within:border-signal focus-within:ring-2 focus-within:ring-signal/15">
                             <span class="grid w-12 shrink-0 place-items-center border-r border-line bg-canvas font-display text-lg font-bold text-ink-950">S/</span>
-                            <input id="precio_kg" name="precio_kg" value="{{ old('precio_kg') }}" type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" placeholder="0.0000" class="min-w-0 flex-1 px-4 text-lg font-semibold text-ink-950 outline-none placeholder:text-steel-300" aria-describedby="@error('precio_kg') precio_kg-error @enderror" autofocus>
+                            <input id="precio_kg" name="precio_kg" value="{{ old('precio_kg') }}" type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" placeholder="0.00" class="min-w-0 flex-1 px-4 text-lg font-semibold text-ink-950 outline-none placeholder:text-steel-300" aria-describedby="@error('precio_kg') precio_kg-error @enderror" autofocus>
                         </div>
                     </x-form-field>
 
@@ -59,7 +59,7 @@
                 <p class="mt-1 text-xs text-steel-300">{{ today()->translatedFormat('l') }}</p>
             </div>
             <ul class="mt-6 grid gap-3 text-sm text-white">
-                @foreach (['Confirma el producto correcto', 'Registra hasta cuatro decimales', 'Justifica cualquier modificación'] as $tip)
+                @foreach (['Confirma el producto correcto', 'Usa dos decimales normalmente', 'Justifica cualquier modificación'] as $tip)
                     <li class="flex items-center gap-3 border-b border-white/10 pb-3"><span class="size-2 shrink-0 bg-hazard"></span>{{ $tip }}</li>
                 @endforeach
             </ul>

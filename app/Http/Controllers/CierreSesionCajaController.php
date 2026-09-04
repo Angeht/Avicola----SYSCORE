@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CloseSesionCajaRequest;
 use App\Models\SesionCaja;
 use App\Models\Usuario;
+use App\Services\AutorizacionPinAdministrador;
 use App\Services\ResumenJornadaCaja;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -14,7 +15,10 @@ use Illuminate\Validation\ValidationException;
 
 class CierreSesionCajaController extends Controller
 {
-    public function __construct(private ResumenJornadaCaja $resumenJornada) {}
+    public function __construct(
+        private ResumenJornadaCaja $resumenJornada,
+        private AutorizacionPinAdministrador $autorizacionPin,
+    ) {}
 
     public function create(Request $request, SesionCaja $sesionCaja): View
     {
@@ -23,7 +27,9 @@ class CierreSesionCajaController extends Controller
         abort_unless($sesionCaja->estaAbierta(), 409, 'Esta sesión de caja ya fue cerrada.');
 
         return view('caja.cierre', [
+            'administrators' => $this->autorizacionPin->administradoresDisponibles(),
             'cashSession' => $sesionCaja,
+            'pinSetupUser' => $user->esAdministrador() ? $user : null,
             'summary' => $this->resumenJornada->obtener($sesionCaja),
             'paymentMethodBreakdown' => $this->resumenJornada->desglosePorMedio($sesionCaja),
         ]);
@@ -33,8 +39,9 @@ class CierreSesionCajaController extends Controller
     {
         $user = $this->authenticatedUser($request);
         $validated = $request->validated();
+        $administrator = $this->autorizacionPin->confirmar($request, 'cierre-caja');
 
-        DB::transaction(function () use ($sesionCaja, $user, $validated): void {
+        DB::transaction(function () use ($administrator, $sesionCaja, $user, $validated): void {
             $lockedSession = SesionCaja::query()
                 ->whereKey($sesionCaja->getKey())
                 ->lockForUpdate()
@@ -62,6 +69,7 @@ class CierreSesionCajaController extends Controller
             $lockedSession->update([
                 'cierre_at' => now(),
                 'cerrada_por' => $user->getKey(),
+                'cierre_autorizada_por' => $administrator->getKey(),
                 'monto_contado_efectivo' => $validated['monto_contado_efectivo'],
                 'observacion_cierre' => $validated['observacion_cierre'],
             ]);

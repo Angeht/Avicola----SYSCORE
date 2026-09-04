@@ -4,9 +4,15 @@
 @section('section', 'Jabas y taras')
 
 @section('content')
+    @php
+        $tare = static function (float|int|string|null $value): string {
+            return rtrim(rtrim(number_format((float) ($value ?? 0), 3, ',', '.'), '0'), ',');
+        };
+    @endphp
+
     <x-catalog-header
-        eyebrow="Catálogo / Pesajes"
-        title="Tipos de jaba"
+        eyebrow="Proveedores / Pesajes"
+        title="Jabas y taras"
         description="Administra los recipientes y la tara que se descuenta para obtener el peso neto de cada operación."
         :count="$activeCount + $inactiveCount"
         count-label="Tipos registrados"
@@ -18,7 +24,7 @@
         <section class="reveal-up mt-6 flex flex-col gap-4 border-l-4 border-danger bg-danger/8 p-5 sm:flex-row sm:items-center sm:justify-between" aria-label="Advertencia de taras pendientes">
             <div class="flex gap-4">
                 <span class="grid size-10 shrink-0 place-items-center bg-danger text-white"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4 3 20h18L12 4Z" /><path d="M12 9v5m0 3h.01" /></svg></span>
-                <div><p class="font-display text-lg font-bold text-ink-950 uppercase">{{ $pendingTareCount }} {{ $pendingTareCount === 1 ? 'jaba activa necesita' : 'jabas activas necesitan' }} calibración</p><p class="mt-1 text-sm text-ink-700">No uses estos tipos en pesajes reales hasta reemplazar la tara 0.000 kg.</p></div>
+                <div><p class="font-display text-lg font-bold text-ink-950 uppercase">{{ $pendingTareCount }} {{ $pendingTareCount === 1 ? 'jaba activa necesita' : 'jabas activas necesitan' }} calibración</p><p class="mt-1 text-sm text-ink-700">No uses estos tipos en pesajes reales hasta reemplazar la tara 0 kg.</p></div>
             </div>
             <span class="whitespace-nowrap font-mono text-[9px] font-semibold tracking-wider text-danger uppercase">Acción requerida</span>
         </section>
@@ -28,7 +34,7 @@
         <div class="border-l-4 border-signal bg-paper px-4 py-3 shadow-sm"><span class="font-display text-3xl font-extrabold text-ink-950">{{ $activeCount }}</span><p class="font-mono text-[8px] tracking-wider text-signal uppercase">Activas</p></div>
         <div class="border-l-4 border-steel-300 bg-paper px-4 py-3 shadow-sm"><span class="font-display text-3xl font-extrabold text-ink-950">{{ $inactiveCount }}</span><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Inactivas</p></div>
         <div class="border-l-4 border-danger bg-paper px-4 py-3 shadow-sm"><span class="font-display text-3xl font-extrabold text-ink-950">{{ $pendingTareCount }}</span><p class="font-mono text-[8px] tracking-wider text-danger uppercase">Tara pendiente</p></div>
-        <div class="border-l-4 border-hazard bg-paper px-4 py-3 shadow-sm"><span class="font-mono text-2xl font-extrabold text-ink-950">{{ number_format((float) ($averageTare ?? 0), 3) }}</span><p class="font-mono text-[8px] tracking-wider text-ink-700 uppercase">Tara media kg</p></div>
+        <div class="border-l-4 border-hazard bg-paper px-4 py-3 shadow-sm"><span class="font-mono text-2xl font-extrabold text-ink-950">{{ $tare($averageTare) }}</span><p class="font-mono text-[8px] tracking-wider text-ink-700 uppercase">Tara media kg</p></div>
     </section>
 
     <x-catalog-toolbar :action="route('tipos-jaba.index')" :search="$search" :status="$status" placeholder="Buscar por nombre o descripción" />
@@ -48,9 +54,9 @@
                                 <td class="px-6 py-4"><p class="font-semibold text-ink-950">{{ $crateType->nombre }}</p><p class="mt-1 max-w-xl truncate text-xs text-steel-500">{{ $crateType->descripcion ?: 'Sin descripción' }}</p></td>
                                 <td class="px-6 py-4">
                                     @if ((float) $crateType->tara_referencial_kg > 0)
-                                        <p class="font-mono text-lg font-bold text-ink-950">{{ number_format((float) $crateType->tara_referencial_kg, 3) }} <span class="text-[10px] text-signal">kg</span></p>
+                                        <p class="font-mono text-lg font-bold text-ink-950">{{ $tare($crateType->tara_referencial_kg) }} <span class="text-[10px] text-signal">kg</span></p>
                                     @else
-                                        <span class="inline-flex items-center gap-2 border border-danger/30 bg-danger/8 px-2.5 py-1 font-mono text-[8px] font-semibold tracking-wider text-danger uppercase"><span class="size-1.5 bg-danger"></span>0.000 kg · Pendiente</span>
+                                        <span class="inline-flex items-center gap-2 border border-danger/30 bg-danger/8 px-2.5 py-1 font-mono text-[8px] font-semibold tracking-wider text-danger uppercase"><span class="size-1.5 bg-danger"></span>0 kg · Pendiente</span>
                                     @endif
                                 </td>
                                 <td class="px-6 py-4"><x-status-badge :active="$crateType->activo" /></td>
@@ -74,7 +80,7 @@
                 @foreach ($crateTypes as $crateType)
                     <article class="p-5">
                         <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="font-semibold text-ink-950">{{ $crateType->nombre }}</p><p class="mt-1 text-xs leading-5 text-steel-500">{{ $crateType->descripcion ?: 'Sin descripción' }}</p></div><x-status-badge :active="$crateType->activo" /></div>
-                        <div class="mt-4 border-l-4 {{ (float) $crateType->tara_referencial_kg > 0 ? 'border-signal' : 'border-danger' }} bg-canvas px-4 py-3"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Tara referencial</p><p class="mt-1 font-mono text-xl font-bold text-ink-950">{{ number_format((float) $crateType->tara_referencial_kg, 3) }} kg</p>@if ((float) $crateType->tara_referencial_kg <= 0)<p class="mt-1 text-xs font-semibold text-danger">Pendiente de configurar</p>@endif</div>
+                        <div class="mt-4 border-l-4 {{ (float) $crateType->tara_referencial_kg > 0 ? 'border-signal' : 'border-danger' }} bg-canvas px-4 py-3"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Tara referencial</p><p class="mt-1 font-mono text-xl font-bold text-ink-950">{{ $tare($crateType->tara_referencial_kg) }} kg</p>@if ((float) $crateType->tara_referencial_kg <= 0)<p class="mt-1 text-xs font-semibold text-danger">Pendiente de configurar</p>@endif</div>
                         <div class="mt-4 flex gap-2">
                             <a href="{{ route('tipos-jaba.edit', $crateType) }}" class="inline-flex min-h-10 flex-1 items-center justify-center border border-ink-950 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Editar</a>
                             @if ($crateType->activo)

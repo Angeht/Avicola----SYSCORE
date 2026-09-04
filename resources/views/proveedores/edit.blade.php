@@ -13,7 +13,7 @@
         </section>
         <aside class="industrial-hatch panel-cut bg-ink-950 p-6 text-white shadow-panel sm:p-8" aria-labelledby="supplier-status-title">
             <p class="font-mono text-[9px] tracking-[0.2em] text-hazard uppercase">Registro #{{ $supplier->id }}</p><h2 id="supplier-status-title" class="mt-4 font-display text-2xl font-bold tracking-wide uppercase">Control de estado</h2><p class="mt-3 text-sm leading-6 text-steel-300">Desactivar conserva cargas y pagos históricos. Puedes reactivarlo en cualquier momento.</p>
-            <dl class="mt-7 grid gap-4 border-t border-white/10 pt-5"><div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Estado actual</dt><dd class="mt-2"><x-status-badge :active="$supplier->activo" /></dd></div><div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Última actualización</dt><dd class="mt-1 text-sm text-white">{{ $supplier->updated_at->translatedFormat('d M Y · H:i') }}</dd></div></dl>
+            <dl class="mt-7 grid gap-4 border-t border-white/10 pt-5"><div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Estado actual</dt><dd class="mt-2"><x-status-badge :active="$supplier->activo" /></dd></div><div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Cuenta / CCI</dt><dd class="mt-1 break-all font-mono text-sm text-white">{{ $supplier->numero_cuenta ?: 'No registrada' }}</dd></div><div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Última actualización</dt><dd class="mt-1 text-sm text-white">{{ $supplier->updated_at->translatedFormat('d M Y · H:i') }}</dd></div></dl>
         </aside>
     </div>
 @endsection

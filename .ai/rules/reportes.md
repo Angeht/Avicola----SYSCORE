@@ -2,6 +2,7 @@
 paths:
   - 'app/Http/Controllers/ReporteController.php,resources/views/reportes/**'
   - 'app/Http/Controllers/ReporteController.php,resources/views/reportes/customer-account-ticket.blade.php'
+  - 'app/Http/Controllers/ReporteController.php,resources/views/reportes/supplier-account*.blade.php'
 ---
 
 # Reportes
@@ -20,3 +21,6 @@ El estado de cuenta ofrece ticket térmico de 80 mm con cliente, corte, movimien
 
 ## El ticket muestra solo el ciclo de deuda vigente
 Para acortar el ticket, localizar el último movimiento cuyo saldo acumulado quedó exactamente en cero y mostrar únicamente los movimientos posteriores con totales recalculados. Si el último movimiento saldó la cuenta, el ticket queda sin movimientos hasta la próxima venta. La pantalla completa, CSV y PDF conservan todo el historial.
+
+## Exportar el estado de cuenta del proveedor en tres formatos
+El detalle consolidado del proveedor ofrece CSV completo y vista imprimible/PDF con todos los movimientos hasta el corte. El ticket de 80 mm muestra solo el ciclo vigente posterior al último saldo cero, conserva la referencia de carga y limita la salida a 200 movimientos con aviso de truncamiento.

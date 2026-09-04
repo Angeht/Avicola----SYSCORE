@@ -3,12 +3,10 @@
 namespace Tests\Feature;
 
 use App\Contracts\GestorRespaldos;
-use App\Models\ConfiguracionRespaldo;
 use App\Models\Permiso;
 use App\Models\Respaldo;
 use App\Models\Rol;
 use App\Models\Usuario;
-use App\Services\TareaProgramadaWindows;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Mockery\MockInterface;
@@ -39,19 +37,17 @@ class RespaldoControllerTest extends TestCase
         $this->mock(GestorRespaldos::class, function (MockInterface $mock): void {
             $mock->shouldReceive('motorDisponible')->once()->andReturnTrue();
         });
-        $this->mock(TareaProgramadaWindows::class, function (MockInterface $mock): void {
-            $mock->shouldReceive('esCompatible')->once()->andReturnTrue();
-            $mock->shouldReceive('estaInstalada')->once()->andReturnFalse();
-        });
-
         $response = $this->actingAs($user)->get(route('respaldos.index'));
 
         $response
             ->assertOk()
             ->assertSee('Respaldos de MySQL')
+            ->assertSee('Crear copia ahora')
+            ->assertSee('Restauración segura')
             ->assertSee($dangerousError)
             ->assertDontSee($dangerousError, false)
-            ->assertSee('Instalación pendiente');
+            ->assertDontSee('Configuración automática')
+            ->assertDontSee('Programador del sistema');
     }
 
     public function test_authorized_user_can_create_a_manual_backup(): void
@@ -71,40 +67,16 @@ class RespaldoControllerTest extends TestCase
             ->assertSessionHas('status', "Copia {$backup->nombre_archivo} creada correctamente.");
     }
 
-    public function test_configuration_is_normalized_updated_and_audited(): void
+    public function test_automatic_backup_configuration_and_scheduler_endpoints_are_not_available(): void
     {
         $user = $this->userWithManagementPermission();
 
-        $response = $this->actingAs($user)->put(route('respaldos.configuracion.update'), [
-            'activo' => '1',
-            'frecuencia' => ' mensual ',
-            'hora' => '03:45',
-            'dia_semana' => '6',
-            'dia_mes' => '15',
-            'retencion_cantidad' => '30',
-            'verificar_automaticamente' => '1',
-        ]);
-
-        $response
-            ->assertRedirect(route('respaldos.index'))
-            ->assertSessionHas('status', 'Configuración de respaldos actualizada correctamente.');
-        $this->assertDatabaseHas('configuracion_respaldos', [
-            'id' => 1,
-            'activo' => 1,
-            'frecuencia' => ConfiguracionRespaldo::FRECUENCIA_MENSUAL,
-            'hora' => '03:45:00',
-            'dia_semana' => null,
-            'dia_mes' => 15,
-            'retencion_cantidad' => 30,
-            'verificar_automaticamente' => 1,
-            'actualizado_por' => $user->id,
-        ]);
-        $this->assertDatabaseHas('auditorias', [
-            'usuario_id' => $user->id,
-            'tabla_afectada' => 'configuracion_respaldos',
-            'registro_id' => 1,
-            'accion' => 'UPDATE',
-        ]);
+        $this->actingAs($user)
+            ->put('/respaldos/configuracion')
+            ->assertMethodNotAllowed();
+        $this->actingAs($user)
+            ->post('/respaldos/tarea-programada')
+            ->assertMethodNotAllowed();
     }
 
     public function test_authorized_user_can_download_only_an_available_private_backup(): void

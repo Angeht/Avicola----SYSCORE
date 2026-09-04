@@ -234,8 +234,45 @@ class VentaControllerTest extends TestCase
         $this->actingAs($user)
             ->get(route('ventas.show', $sale))
             ->assertOk()
+            ->assertSee('S/ 10,00')
+            ->assertDontSee('S/ 10,0000')
             ->assertSee('− 2,000 kg')
             ->assertSee('99,000 kg');
+    }
+
+    public function test_create_form_displays_unit_prices_without_redundant_zeroes(): void
+    {
+        $user = $this->userWithPermissions(['VENTAS_REGISTRAR']);
+        $this->sellableProduct('POLLO PRECIO LEGIBLE', 100, 200, 7.25);
+
+        $response = $this->actingAs($user)->get(route('ventas.create'));
+
+        $response
+            ->assertOk()
+            ->assertSee('S/ 7,25/kg')
+            ->assertDontSee('S/ 7,2500/kg');
+    }
+
+    public function test_create_form_lists_a_product_with_current_price_even_without_stock(): void
+    {
+        $user = $this->userWithPermissions(['VENTAS_REGISTRAR']);
+        $product = Producto::factory()->create(['nombre' => 'POLLO SIN EXISTENCIA']);
+        $priceDay = PrecioDia::factory()->create([
+            'producto_id' => $product->id,
+            'fecha' => today(),
+        ]);
+        PrecioDiaVersion::factory()->create([
+            'precio_dia_id' => $priceDay->id,
+            'precio_kg' => 8.75,
+            'vigente_desde' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get(route('ventas.create'));
+
+        $response
+            ->assertSee('POLLO SIN EXISTENCIA')
+            ->assertSee('data-birds="0"', false)
+            ->assertSee('data-kilograms="0.000"', false);
     }
 
     public function test_weight_only_product_rejects_birds_and_crates(): void

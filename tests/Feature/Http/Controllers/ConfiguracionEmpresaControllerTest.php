@@ -46,6 +46,7 @@ class ConfiguracionEmpresaControllerTest extends TestCase
             ->assertSee('Configuración de la empresa')
             ->assertSee($dangerousName)
             ->assertDontSee($dangerousName, false)
+            ->assertDontSee(route('tipos-jaba.index'), false)
             ->assertSee('RUC');
     }
 

@@ -59,6 +59,15 @@ class AnularVentaRequest extends FormRequest
                         'motivo_anulacion',
                         'Anula primero las cobranzas vigentes aplicadas a esta venta.',
                     );
+
+                    return;
+                }
+
+                if ($sale->ajustesCliente()->vigentes()->exists()) {
+                    $validator->errors()->add(
+                        'motivo_anulacion',
+                        'Anula primero los ajustes comerciales vigentes de esta venta.',
+                    );
                 }
             },
         ];

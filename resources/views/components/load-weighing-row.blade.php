@@ -7,6 +7,14 @@
 
 @php
     $fieldError = fn (string $field): ?string => $showErrors ? $errors->first("pesajes.$index.$field") : null;
+    $rawTare = $weighing['tara_unitaria_aplicada_kg'] ?? '0.000';
+    $normalizedTare = str_replace(',', '.', (string) $rawTare);
+    $tareValue = is_numeric($normalizedTare)
+        ? rtrim(rtrim(number_format((float) $normalizedTare, 3, '.', ''), '0'), '.')
+        : $rawTare;
+    $tareDisplay = static function (float|int|string|null $value): string {
+        return rtrim(rtrim(number_format((float) ($value ?? 0), 3, ',', '.'), '0'), ',');
+    };
 @endphp
 
 <article data-weighing-row class="corner-frame border border-line bg-white shadow-sm">
@@ -33,16 +41,16 @@
             <select data-crate-type id="pesajes-{{ $index }}-tipo-jaba" name="pesajes[{{ $index }}][tipo_jaba_id]" class="mt-2 min-h-12 w-full border border-line bg-paper px-4 text-sm font-semibold text-ink-950 outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/15">
                 <option value="">Sin jabas</option>
                 @foreach ($crateTypes as $crateType)
-                    <option value="{{ $crateType->id }}" data-reference-tare="{{ number_format((float) $crateType->tara_referencial_kg, 3, '.', '') }}" @selected((string) ($weighing['tipo_jaba_id'] ?? '') === (string) $crateType->id)>{{ $crateType->nombre }} · ref. {{ number_format((float) $crateType->tara_referencial_kg, 3, ',', '.') }} kg</option>
+                    <option value="{{ $crateType->id }}" data-reference-tare="{{ number_format((float) $crateType->tara_referencial_kg, 3, '.', '') }}" @selected((string) ($weighing['tipo_jaba_id'] ?? '') === (string) $crateType->id)>{{ $crateType->nombre }} · ref. {{ $tareDisplay($crateType->tara_referencial_kg) }} kg</option>
                 @endforeach
             </select>
             @if ($fieldError('tipo_jaba_id'))<p class="mt-2 text-sm font-medium text-danger">{{ $fieldError('tipo_jaba_id') }}</p>@endif
         </div>
 
         <div>
-            <label data-field-label="tara_unitaria_aplicada_kg" for="pesajes-{{ $index }}-tara" class="font-mono text-[9px] font-semibold tracking-[0.14em] text-ink-700 uppercase">Tara unitaria kg</label>
-            <input data-tare id="pesajes-{{ $index }}-tara" name="pesajes[{{ $index }}][tara_unitaria_aplicada_kg]" value="{{ $weighing['tara_unitaria_aplicada_kg'] ?? '0.000' }}" type="number" min="0" max="9999999.999" step="0.001" inputmode="decimal" class="mt-2 min-h-12 w-full border border-line bg-paper px-4 text-sm font-semibold text-ink-950 outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/15">
-            <p class="mt-1 text-xs leading-5 text-steel-500">Se carga desde el tipo de jaba y puedes editarla.</p>
+            <label data-field-label="tara_unitaria_aplicada_kg" for="pesajes-{{ $index }}-tara" class="flex items-center justify-between gap-2 font-mono text-[9px] font-semibold tracking-[0.14em] text-ink-700 uppercase"><span>Tara unitaria kg</span><span class="border border-signal/30 bg-signal-soft px-2 py-0.5 text-[8px] text-signal">Editable</span></label>
+            <input data-tare id="pesajes-{{ $index }}-tara" name="pesajes[{{ $index }}][tara_unitaria_aplicada_kg]" value="{{ $tareValue }}" type="number" min="0" max="9999999.999" step="0.001" inputmode="decimal" class="mt-2 min-h-12 w-full border border-signal/40 bg-paper px-4 font-mono text-sm font-semibold text-ink-950 outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/15" placeholder="0">
+            <p class="mt-1 text-xs leading-5 text-steel-500">Se completa desde la jaba seleccionada; corrígela aquí si la tara real fue distinta.</p>
             @if ($fieldError('tara_unitaria_aplicada_kg'))<p class="mt-2 text-sm font-medium text-danger">{{ $fieldError('tara_unitaria_aplicada_kg') }}</p>@endif
         </div>
 

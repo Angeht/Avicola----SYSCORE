@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 #[Fillable(['numero_pago', 'carga_id', 'sesion_caja_id', 'medio_pago_id', 'monto', 'pagado_por', 'pagado_at', 'observacion', 'anulada_por', 'anulada_at', 'motivo_anulacion'])]
@@ -42,6 +43,11 @@ class PagoProveedor extends Model
     public function anuladaPor(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'anulada_por');
+    }
+
+    public function ajustesProveedor(): HasMany
+    {
+        return $this->hasMany(AjusteProveedor::class, 'pago_proveedor_id');
     }
 
     public function estaAnulado(): bool

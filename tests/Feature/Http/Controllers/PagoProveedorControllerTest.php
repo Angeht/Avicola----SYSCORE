@@ -32,7 +32,7 @@ class PagoProveedorControllerTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_create_form_only_lists_pending_loads_and_active_payment_methods(): void
+    public function test_create_form_lists_suppliers_with_consolidated_debt_and_their_pending_loads(): void
     {
         $user = $this->userWithPermission('PROVEEDORES_PAGAR');
         $pendingLoad = CargaProveedor::factory()->create([
@@ -57,7 +57,9 @@ class PagoProveedorControllerTest extends TestCase
         $response
             ->assertOk()
             ->assertSee($pendingLoad->numero_carga)
-            ->assertSee('value="'.$pendingLoad->id.'"', false)
+            ->assertSee($pendingLoad->proveedor->nombre_razon_social)
+            ->assertSee('value="'.$pendingLoad->proveedor_id.'"', false)
+            ->assertSee('Deuda acumulada')
             ->assertSee($activeMethod->nombre)
             ->assertDontSee($paidLoad->numero_carga)
             ->assertDontSee('TRANSFERENCIA INACTIVA');
@@ -80,11 +82,11 @@ class PagoProveedorControllerTest extends TestCase
         $this->actingAs($user)
             ->from(route('pagos-proveedor.create'))
             ->post(route('pagos-proveedor.store'), [
-                'carga_id' => $cancelledLoad->id,
+                'proveedor_id' => $cancelledLoad->proveedor_id,
                 'medio_pago_id' => $paymentMethod->id,
                 'monto' => '50.00',
             ])
-            ->assertSessionHasErrors('carga_id');
+            ->assertSessionHasErrors('proveedor_id');
         $this->assertDatabaseCount('pagos_proveedor', 0);
     }
 
@@ -100,7 +102,7 @@ class PagoProveedorControllerTest extends TestCase
         $paymentMethod = MedioPago::factory()->create();
 
         $response = $this->actingAs($user)->post(route('pagos-proveedor.store'), [
-            'carga_id' => $load->id,
+            'proveedor_id' => $load->proveedor_id,
             'medio_pago_id' => $paymentMethod->id,
             'monto' => '325,50',
             'observacion' => '  operación   bancaria  8842 ',
@@ -148,7 +150,7 @@ class PagoProveedorControllerTest extends TestCase
         $paymentMethod = MedioPago::factory()->create();
 
         $this->actingAs($user)->post(route('pagos-proveedor.store'), [
-            'carga_id' => $load->id,
+            'proveedor_id' => $load->proveedor_id,
             'medio_pago_id' => $paymentMethod->id,
             'monto' => '50.00',
             'observacion' => null,
@@ -176,7 +178,7 @@ class PagoProveedorControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('pagos-proveedor.create'))
             ->post(route('pagos-proveedor.store'), [
-                'carga_id' => $load->id,
+                'proveedor_id' => $load->proveedor_id,
                 'medio_pago_id' => $cashMethod->id,
                 'monto' => '100.00',
                 'observacion' => null,
@@ -201,7 +203,7 @@ class PagoProveedorControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('pagos-proveedor.create'))
             ->post(route('pagos-proveedor.store'), [
-                'carga_id' => $load->id,
+                'proveedor_id' => $load->proveedor_id,
                 'medio_pago_id' => $cashMethod->id,
                 'monto' => '75.01',
                 'observacion' => null,
@@ -224,7 +226,7 @@ class PagoProveedorControllerTest extends TestCase
         $cashMethod = MedioPago::factory()->efectivo()->create();
 
         $this->actingAs($user)->post(route('pagos-proveedor.store'), [
-            'carga_id' => $load->id,
+            'proveedor_id' => $load->proveedor_id,
             'medio_pago_id' => $cashMethod->id,
             'monto' => '125.25',
             'observacion' => null,
@@ -242,7 +244,7 @@ class PagoProveedorControllerTest extends TestCase
         ]);
     }
 
-    public function test_payment_cannot_exceed_the_loads_remaining_balance(): void
+    public function test_payment_cannot_exceed_the_suppliers_total_debt(): void
     {
         $user = $this->userWithPermission('PROVEEDORES_PAGAR');
         $load = CargaProveedor::factory()->create(['costo_total' => 300]);
@@ -255,16 +257,95 @@ class PagoProveedorControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('pagos-proveedor.create'))
             ->post(route('pagos-proveedor.store'), [
-                'carga_id' => $load->id,
+                'proveedor_id' => $load->proveedor_id,
                 'medio_pago_id' => $paymentMethod->id,
                 'monto' => '100.01',
                 'observacion' => null,
             ]);
 
         $response->assertSessionHasErrors([
-            'monto' => 'El pago no puede superar el saldo pendiente de la carga.',
+            'monto' => 'El pago no puede superar la deuda total del proveedor.',
         ]);
         $this->assertDatabaseCount('pagos_proveedor', 1);
+    }
+
+    public function test_payment_is_distributed_across_the_suppliers_oldest_pending_loads(): void
+    {
+        $user = $this->userWithPermission('PROVEEDORES_PAGAR');
+        $provider = Proveedor::factory()->create();
+        $oldestLoad = CargaProveedor::factory()->create([
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-20',
+            'costo_total' => 100,
+        ]);
+        $newestLoad = CargaProveedor::factory()->create([
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-21',
+            'costo_total' => 200,
+        ]);
+        $otherLoad = CargaProveedor::factory()->create(['costo_total' => 400]);
+        $paymentMethod = MedioPago::factory()->create();
+
+        $response = $this->actingAs($user)->post(route('pagos-proveedor.store'), [
+            'proveedor_id' => $provider->id,
+            'medio_pago_id' => $paymentMethod->id,
+            'monto' => '250.00',
+        ]);
+
+        $response
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Pago distribuido automáticamente entre 2 cargas pendientes del proveedor.');
+        $this->assertDatabaseHas('pagos_proveedor', [
+            'carga_id' => $oldestLoad->id,
+            'monto' => 100,
+        ]);
+        $this->assertDatabaseHas('pagos_proveedor', [
+            'carga_id' => $newestLoad->id,
+            'monto' => 150,
+        ]);
+        $this->assertDatabaseHas('vw_saldos_carga_proveedor', [
+            'carga_id' => $newestLoad->id,
+            'saldo_pendiente' => 50,
+        ]);
+        $this->assertDatabaseHas('vw_saldos_carga_proveedor', [
+            'carga_id' => $otherLoad->id,
+            'saldo_pendiente' => 400,
+        ]);
+    }
+
+    public function test_payment_can_include_a_provider_discount_without_moving_extra_cash(): void
+    {
+        $user = $this->userWithPermission('PROVEEDORES_PAGAR');
+        $user->roles()->firstOrFail()->permisos()->attach(
+            Permiso::query()->where('codigo', 'PROVEEDORES_AJUSTAR')->firstOrFail(),
+        );
+        $load = CargaProveedor::factory()->create(['costo_total' => 300]);
+        $paymentMethod = MedioPago::factory()->create(['es_efectivo' => false]);
+
+        $this->actingAs($user)->post(route('pagos-proveedor.store'), [
+            'proveedor_id' => $load->proveedor_id,
+            'medio_pago_id' => $paymentMethod->id,
+            'monto' => '250.00',
+            'aplicar_descuento' => '1',
+            'monto_descuento' => '50.00',
+            'motivo_descuento' => 'Descuento acordado por diferencia de calidad.',
+        ])->assertRedirect();
+
+        $payment = PagoProveedor::query()->firstOrFail();
+        $this->assertDatabaseHas('pagos_proveedor', [
+            'id' => $payment->id,
+            'monto' => 250.00,
+        ]);
+        $this->assertDatabaseHas('ajustes_proveedor', [
+            'carga_id' => $load->id,
+            'pago_proveedor_id' => $payment->id,
+            'tipo' => 'DESCUENTO',
+            'monto' => 50.00,
+        ]);
+        $this->assertDatabaseHas('vw_saldos_carga_proveedor', [
+            'carga_id' => $load->id,
+            'saldo_pendiente' => 0.00,
+        ]);
     }
 
     public function test_inactive_payment_method_is_rejected(): void
@@ -276,7 +357,7 @@ class PagoProveedorControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('pagos-proveedor.create'))
             ->post(route('pagos-proveedor.store'), [
-                'carga_id' => $load->id,
+                'proveedor_id' => $load->proveedor_id,
                 'medio_pago_id' => $paymentMethod->id,
                 'monto' => '100.00',
                 'observacion' => null,

@@ -7,6 +7,19 @@
     @php
         $inputClasses = 'mt-2 min-h-12 w-full border border-line bg-white px-4 text-sm font-semibold text-ink-950 outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/15';
         $quantity = fn (float|int|string|null $value, int $decimals = 0): string => number_format((float) ($value ?? 0), $decimals, ',', '.');
+        $unitPrice = static function (float|int|string|null $value): string {
+            $formatted = number_format((float) ($value ?? 0), 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
+        $rawTare = old('tara_unitaria_aplicada_kg', $weighing->tara_unitaria_aplicada_kg);
+        $normalizedTare = str_replace(',', '.', (string) $rawTare);
+        $tareValue = is_numeric($normalizedTare)
+            ? rtrim(rtrim(number_format((float) $normalizedTare, 3, '.', ''), '0'), '.')
+            : $rawTare;
+        $tareDisplay = static function (float|int|string|null $value): string {
+            return rtrim(rtrim(number_format((float) ($value ?? 0), 3, ',', '.'), '0'), ',');
+        };
     @endphp
 
     <div class="reveal-up grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -35,16 +48,16 @@
                         <select data-crate-type id="tipo_jaba_id" name="tipo_jaba_id" class="{{ $inputClasses }}" @error('tipo_jaba_id') aria-invalid="true" aria-describedby="tipo_jaba_id-error" @enderror>
                             <option value="">Sin jabas</option>
                             @foreach ($crateTypes as $crateType)
-                                <option value="{{ $crateType->id }}" data-reference-tare="{{ number_format((float) $crateType->tara_referencial_kg, 3, '.', '') }}" @selected((string) old('tipo_jaba_id', $weighing->tipo_jaba_id) === (string) $crateType->id)>{{ $crateType->nombre }} · ref. {{ $quantity($crateType->tara_referencial_kg, 3) }} kg</option>
+                                <option value="{{ $crateType->id }}" data-reference-tare="{{ number_format((float) $crateType->tara_referencial_kg, 3, '.', '') }}" @selected((string) old('tipo_jaba_id', $weighing->tipo_jaba_id) === (string) $crateType->id)>{{ $crateType->nombre }} · ref. {{ $tareDisplay($crateType->tara_referencial_kg) }} kg</option>
                             @endforeach
                         </select>
                         @error('tipo_jaba_id')<p id="tipo_jaba_id-error" class="mt-2 text-sm font-medium text-danger">{{ $message }}</p>@enderror
                     </div>
 
                     <div>
-                        <label for="tara_unitaria_aplicada_kg" class="font-mono text-[9px] font-semibold tracking-[0.14em] text-ink-700 uppercase">Tara unitaria kg</label>
-                        <input data-tare id="tara_unitaria_aplicada_kg" name="tara_unitaria_aplicada_kg" value="{{ old('tara_unitaria_aplicada_kg', $weighing->tara_unitaria_aplicada_kg) }}" type="number" min="0" max="9999999.999" step="0.001" inputmode="decimal" class="{{ $inputClasses }}" @error('tara_unitaria_aplicada_kg') aria-invalid="true" aria-describedby="tara_unitaria_aplicada_kg-error" @enderror>
-                        <p class="mt-1 text-xs leading-5 text-steel-500">Cambiar el tipo de jaba carga su tara referencial.</p>
+                        <label for="tara_unitaria_aplicada_kg" class="flex items-center justify-between gap-2 font-mono text-[9px] font-semibold tracking-[0.14em] text-ink-700 uppercase"><span>Tara unitaria kg</span><span class="border border-signal/30 bg-signal-soft px-2 py-0.5 text-[8px] text-signal">Editable</span></label>
+                        <input data-tare id="tara_unitaria_aplicada_kg" name="tara_unitaria_aplicada_kg" value="{{ $tareValue }}" type="number" min="0" max="9999999.999" step="0.001" inputmode="decimal" class="{{ $inputClasses }} border-signal/40 font-mono" placeholder="0" @error('tara_unitaria_aplicada_kg') aria-invalid="true" aria-describedby="tara_unitaria_aplicada_kg-error" @enderror>
+                        <p class="mt-1 text-xs leading-5 text-steel-500">Cambiar la jaba carga su referencia; puedes corregirla con la tara real.</p>
                         @error('tara_unitaria_aplicada_kg')<p id="tara_unitaria_aplicada_kg-error" class="mt-2 text-sm font-medium text-danger">{{ $message }}</p>@enderror
                     </div>
 
@@ -70,7 +83,7 @@
                 <div class="mt-6 grid border-l-4 border-signal bg-signal-soft sm:grid-cols-2">
                     <div class="p-5">
                         <p class="font-mono text-[8px] tracking-wider text-signal uppercase">Tara total corregida</p>
-                        <p data-edit-total-tare class="mt-1 font-display text-3xl font-extrabold text-danger">{{ $quantity($weighing->tara_total_kg, 3) }} kg</p>
+                        <p data-edit-total-tare class="mt-1 font-display text-3xl font-extrabold text-danger">{{ $tareDisplay($weighing->tara_total_kg) }} kg</p>
                     </div>
                     <div class="border-t border-signal/20 p-5 sm:border-t-0 sm:border-l">
                         <p class="font-mono text-[8px] tracking-wider text-signal uppercase">Peso neto corregido</p>
@@ -98,7 +111,7 @@
                 <dl class="mt-5 grid gap-4 border-t border-line pt-4 text-sm">
                     <div><dt class="font-mono text-[8px] text-steel-500 uppercase">Producto</dt><dd class="mt-1 font-semibold text-ink-950">{{ $load->producto->nombre }}</dd></div>
                     <div><dt class="font-mono text-[8px] text-steel-500 uppercase">Proveedor</dt><dd class="mt-1 font-semibold text-ink-950">{{ $load->proveedor->nombre_razon_social }}</dd></div>
-                    <div><dt class="font-mono text-[8px] text-steel-500 uppercase">Costo por kg</dt><dd class="mt-1 font-semibold text-ink-950">S/ {{ $quantity($load->costo_kg, 4) }}</dd></div>
+                    <div><dt class="font-mono text-[8px] text-steel-500 uppercase">Costo por kg</dt><dd class="mt-1 font-semibold text-ink-950">{{ $unitPrice($load->costo_kg) }}</dd></div>
                 </dl>
             </section>
         </aside>

@@ -1,5 +1,10 @@
 @php
     $inputClasses = 'min-h-12 w-full border border-line bg-white px-4 text-sm text-ink-950 outline-none transition placeholder:text-steel-300 focus:border-ink-950 focus:ring-2 focus:ring-hazard/40';
+    $rawTare = old('tara_referencial_kg', $crateType?->tara_referencial_kg);
+    $normalizedTare = str_replace(',', '.', (string) $rawTare);
+    $tareValue = is_numeric($normalizedTare)
+        ? rtrim(rtrim(number_format((float) $normalizedTare, 3, '.', ''), '0'), '.')
+        : $rawTare;
 @endphp
 
 <div class="grid gap-6">
@@ -9,7 +14,7 @@
 
     <x-form-field name="tara_referencial_kg" label="Tara referencial" hint="Kilogramos, hasta 3 decimales" required>
         <div class="relative">
-            <input id="tara_referencial_kg" name="tara_referencial_kg" type="number" value="{{ old('tara_referencial_kg', $crateType?->tara_referencial_kg) }}" min="0.001" max="9999999.999" step="0.001" inputmode="decimal" required class="{{ $inputClasses }} pr-14 font-mono text-lg font-semibold" placeholder="0.000" @error('tara_referencial_kg') aria-invalid="true" aria-describedby="tara_referencial_kg-error" @enderror>
+            <input id="tara_referencial_kg" name="tara_referencial_kg" type="number" value="{{ $tareValue }}" min="0.001" max="9999999.999" step="0.001" inputmode="decimal" required class="{{ $inputClasses }} pr-14 font-mono text-lg font-semibold" placeholder="0" @error('tara_referencial_kg') aria-invalid="true" aria-describedby="tara_referencial_kg-error" @enderror>
             <span class="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 font-mono text-[10px] font-semibold text-steel-500 uppercase">kg</span>
         </div>
     </x-form-field>

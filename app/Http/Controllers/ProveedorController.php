@@ -25,6 +25,7 @@ class ProveedorController extends Controller
                 'nro_documento',
                 'nombre_razon_social',
                 'telefono',
+                'numero_cuenta',
                 'direccion',
                 'activo',
                 'updated_at',

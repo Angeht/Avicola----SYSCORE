@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AnularPagoProveedorRequest;
+use App\Models\AjusteProveedor;
 use App\Models\CargaProveedor;
 use App\Models\PagoProveedor;
 use App\Models\SesionCaja;
@@ -46,6 +47,12 @@ class AnulacionPagoProveedorController extends Controller
                 ->whereKey($pagoProveedor->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            $linkedDiscounts = AjusteProveedor::query()
+                ->where('pago_proveedor_id', $lockedPayment->getKey())
+                ->vigentes()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
 
             if ($lockedPayment->estaAnulado()) {
                 throw ValidationException::withMessages([
@@ -71,6 +78,14 @@ class AnulacionPagoProveedorController extends Controller
                 'anulada_at' => now(),
                 'motivo_anulacion' => $validated['motivo_anulacion'],
             ]);
+
+            foreach ($linkedDiscounts as $discount) {
+                $discount->update([
+                    'anulado_por' => $user->getKey(),
+                    'anulado_at' => now(),
+                    'motivo_anulacion' => "Anulación del pago {$lockedPayment->numero_pago}: {$validated['motivo_anulacion']}",
+                ]);
+            }
         }, 3);
 
         return to_route('pagos-proveedor.show', $pagoProveedor)

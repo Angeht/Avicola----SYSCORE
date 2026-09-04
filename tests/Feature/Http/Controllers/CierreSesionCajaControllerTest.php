@@ -43,6 +43,7 @@ class CierreSesionCajaControllerTest extends TestCase
     public function test_owner_can_view_closing_form_with_expected_cash(): void
     {
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $cashSession = SesionCaja::factory()->create([
             'usuario_id' => $user->id,
             'monto_apertura' => 125.75,
@@ -53,6 +54,8 @@ class CierreSesionCajaControllerTest extends TestCase
             ->assertOk()
             ->assertSee('Cierre del día')
             ->assertSee('S/ 125,75')
+            ->assertSee($administrator->nombreCompleto())
+            ->assertSee('PIN administrativo')
             ->assertSee('Confirmar cierre');
     }
 
@@ -134,6 +137,7 @@ class CierreSesionCajaControllerTest extends TestCase
     {
         $this->travelTo('2026-08-27 18:15:00');
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $otherUser = Usuario::factory()->create();
         $cashSession = SesionCaja::factory()->create([
             'usuario_id' => $user->id,
@@ -143,6 +147,8 @@ class CierreSesionCajaControllerTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)->post(route('caja.cierre.store', $cashSession), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_contado_efectivo' => '150.00',
             'observacion_cierre' => null,
             'cerrada_por' => $otherUser->id,
@@ -156,6 +162,7 @@ class CierreSesionCajaControllerTest extends TestCase
             'id' => $cashSession->id,
             'cierre_at' => '2026-08-27 18:15:00',
             'cerrada_por' => $user->id,
+            'cierre_autorizada_por' => $administrator->id,
             'monto_contado_efectivo' => 150.00,
             'observacion_cierre' => null,
         ]);
@@ -168,6 +175,7 @@ class CierreSesionCajaControllerTest extends TestCase
     public function test_difference_requires_an_explanation_and_keeps_session_open(): void
     {
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $cashSession = SesionCaja::factory()->create([
             'usuario_id' => $user->id,
             'monto_apertura' => 100.00,
@@ -176,6 +184,8 @@ class CierreSesionCajaControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('caja.cierre.create', $cashSession))
             ->post(route('caja.cierre.store', $cashSession), [
+                'administrador_id' => $administrator->id,
+                'pin_autorizacion' => '0427',
                 'monto_contado_efectivo' => '95.00',
                 'observacion_cierre' => '',
             ]);
@@ -194,6 +204,7 @@ class CierreSesionCajaControllerTest extends TestCase
     {
         $this->travelTo('2026-08-27 18:30:00');
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $cashSession = SesionCaja::factory()->create([
             'usuario_id' => $user->id,
             'fecha_operacion' => '2026-08-27',
@@ -202,6 +213,8 @@ class CierreSesionCajaControllerTest extends TestCase
         ]);
 
         $this->actingAs($user)->post(route('caja.cierre.store', $cashSession), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_contado_efectivo' => '95.00',
             'observacion_cierre' => '  faltante   <script>alert("caja")</script> ',
         ])->assertRedirect(route('caja.show', $cashSession));
@@ -225,6 +238,7 @@ class CierreSesionCajaControllerTest extends TestCase
     public function test_closed_day_shows_final_result_with_cash_yape_and_transfer(): void
     {
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $cashSession = SesionCaja::factory()->create([
             'usuario_id' => $user->id,
             'monto_apertura' => 100.00,
@@ -251,6 +265,8 @@ class CierreSesionCajaControllerTest extends TestCase
         ]);
 
         $this->actingAs($user)->post(route('caja.cierre.store', $cashSession), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_contado_efectivo' => '100.00',
             'observacion_cierre' => null,
         ])->assertRedirect(route('caja.show', $cashSession));
@@ -267,6 +283,7 @@ class CierreSesionCajaControllerTest extends TestCase
     public function test_closed_session_cannot_be_closed_again(): void
     {
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $cashSession = SesionCaja::factory()->cerrada()->create([
             'usuario_id' => $user->id,
             'monto_apertura' => 80.00,
@@ -276,6 +293,8 @@ class CierreSesionCajaControllerTest extends TestCase
         $response = $this->actingAs($user)
             ->from(route('caja.show', $cashSession))
             ->post(route('caja.cierre.store', $cashSession), [
+                'administrador_id' => $administrator->id,
+                'pin_autorizacion' => '0427',
                 'monto_contado_efectivo' => '80.00',
             ]);
 
@@ -286,20 +305,53 @@ class CierreSesionCajaControllerTest extends TestCase
 
     public function test_administrator_can_close_another_users_session(): void
     {
-        $administrator = Usuario::factory()->create();
+        $administrator = Usuario::factory()->create([
+            'pin_autorizacion_hash' => '0427',
+        ]);
         $administratorRole = Rol::factory()->create(['nombre' => 'ADMINISTRADOR']);
         $administrator->roles()->attach($administratorRole);
         $cashSession = SesionCaja::factory()->create(['monto_apertura' => 50.00]);
 
         $this->actingAs($administrator)->post(route('caja.cierre.store', $cashSession), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_contado_efectivo' => '50.00',
         ])->assertRedirect(route('caja.show', $cashSession));
 
         $this->assertDatabaseHas('sesiones_caja', [
             'id' => $cashSession->id,
             'cerrada_por' => $administrator->id,
+            'cierre_autorizada_por' => $administrator->id,
             'monto_contado_efectivo' => 50.00,
         ]);
+    }
+
+    public function test_wrong_administrator_pin_keeps_the_day_open_and_does_not_flash_the_pin(): void
+    {
+        $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
+        $cashSession = SesionCaja::factory()->create([
+            'usuario_id' => $user->id,
+            'monto_apertura' => 100.00,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->from(route('caja.cierre.create', $cashSession))
+            ->post(route('caja.cierre.store', $cashSession), [
+                'administrador_id' => $administrator->id,
+                'pin_autorizacion' => '9999',
+                'monto_contado_efectivo' => '100.00',
+            ]);
+
+        $response->assertSessionHasErrors([
+            'pin_autorizacion' => 'El administrador o el PIN no son correctos.',
+        ]);
+        $this->assertDatabaseHas('sesiones_caja', [
+            'id' => $cashSession->id,
+            'cierre_at' => null,
+            'cierre_autorizada_por' => null,
+        ]);
+        $this->assertArrayNotHasKey('pin_autorizacion', session('_old_input', []));
     }
 
     private function userWithPermission(): Usuario
@@ -312,5 +364,19 @@ class CierreSesionCajaControllerTest extends TestCase
         $user->roles()->attach($role);
 
         return $user;
+    }
+
+    private function administratorWithPin(string $pin = '0427'): Usuario
+    {
+        $administrator = Usuario::factory()->create([
+            'pin_autorizacion_hash' => $pin,
+        ]);
+        $role = Rol::factory()->create([
+            'nombre' => 'ADMINISTRADOR',
+            'activo' => true,
+        ]);
+        $administrator->roles()->attach($role);
+
+        return $administrator;
     }
 }

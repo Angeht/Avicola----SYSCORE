@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AnularCobranzaRequest;
+use App\Models\AjusteCliente;
 use App\Models\Cobranza;
 use App\Models\SesionCaja;
 use App\Models\Usuario;
@@ -56,6 +57,12 @@ class AnulacionCobranzaController extends Controller
                 ->whereKey($cobranza->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            $roundingAdjustments = AjusteCliente::query()
+                ->where('cobranza_id', $lockedCollection->getKey())
+                ->vigentes()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
 
             if ($lockedCollection->estaAnulada()) {
                 throw ValidationException::withMessages([
@@ -81,6 +88,14 @@ class AnulacionCobranzaController extends Controller
                 'anulada_at' => now(),
                 'motivo_anulacion' => $validated['motivo_anulacion'],
             ]);
+
+            foreach ($roundingAdjustments as $adjustment) {
+                $adjustment->update([
+                    'anulado_por' => $user->getKey(),
+                    'anulado_at' => now(),
+                    'motivo_anulacion' => "Anulación de la cobranza {$lockedCollection->numero_cobranza}: {$validated['motivo_anulacion']}",
+                ]);
+            }
         }, 3);
 
         return to_route('cobranzas.show', $cobranza)

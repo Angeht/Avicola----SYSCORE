@@ -39,6 +39,7 @@ class AnulacionCargaProveedorControllerTest extends TestCase
     {
         $this->travelTo('2026-08-29 16:45:10');
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $otherUser = Usuario::factory()->create();
         $product = Producto::factory()->create();
         $load = CargaProveedor::factory()->create([
@@ -61,9 +62,13 @@ class AnulacionCargaProveedorControllerTest extends TestCase
             ->get(route('cargas-proveedor.anulacion.create', $load))
             ->assertOk()
             ->assertSee($load->numero_carga)
+            ->assertSee($administrator->nombreCompleto())
+            ->assertSee('PIN administrativo')
             ->assertSee('Confirmar anulación');
 
         $response = $this->actingAs($user)->post(route('cargas-proveedor.anulacion.store', $load), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'motivo_anulacion' => '  peso   registrado de forma incorrecta ',
             'anulada_por' => $otherUser->id,
             'anulada_at' => '2000-01-01 00:00:00',
@@ -75,6 +80,7 @@ class AnulacionCargaProveedorControllerTest extends TestCase
         $this->assertDatabaseHas('cargas_proveedor', [
             'id' => $load->id,
             'anulada_por' => $user->id,
+            'anulacion_autorizada_por' => $administrator->id,
             'anulada_at' => '2026-08-29 16:45:10',
             'motivo_anulacion' => 'peso registrado de forma incorrecta',
         ]);
@@ -104,7 +110,33 @@ class AnulacionCargaProveedorControllerTest extends TestCase
             ->get(route('cargas-proveedor.show', $load))
             ->assertOk()
             ->assertSee('Carga anulada')
+            ->assertSee("Autorizada con PIN por {$administrator->nombreCompleto()}")
             ->assertSee('peso registrado de forma incorrecta');
+    }
+
+    public function test_wrong_administrator_pin_does_not_cancel_the_load_or_flash_the_pin(): void
+    {
+        $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
+        $load = CargaProveedor::factory()->create();
+
+        $this->actingAs($user)
+            ->from(route('cargas-proveedor.anulacion.create', $load))
+            ->post(route('cargas-proveedor.anulacion.store', $load), [
+                'administrador_id' => $administrator->id,
+                'pin_autorizacion' => '9999',
+                'motivo_anulacion' => 'La carga fue registrada con información incorrecta.',
+            ])
+            ->assertSessionHasErrors([
+                'pin_autorizacion' => 'El administrador o el PIN no son correctos.',
+            ]);
+
+        $this->assertDatabaseHas('cargas_proveedor', [
+            'id' => $load->id,
+            'anulada_at' => null,
+            'anulacion_autorizada_por' => null,
+        ]);
+        $this->assertArrayNotHasKey('pin_autorizacion', session('_old_input', []));
     }
 
     public function test_load_with_active_payment_cannot_be_cancelled(): void
@@ -199,5 +231,19 @@ class AnulacionCargaProveedorControllerTest extends TestCase
         $user->roles()->attach($role);
 
         return $user;
+    }
+
+    private function administratorWithPin(string $pin = '0427'): Usuario
+    {
+        $administrator = Usuario::factory()->create([
+            'pin_autorizacion_hash' => $pin,
+        ]);
+        $role = Rol::factory()->create([
+            'nombre' => 'ADMINISTRADOR',
+            'activo' => true,
+        ]);
+        $administrator->roles()->attach($role);
+
+        return $administrator;
     }
 }

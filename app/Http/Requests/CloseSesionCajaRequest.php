@@ -30,6 +30,8 @@ class CloseSesionCajaRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'administrador_id' => ['required', 'integer'],
+            'pin_autorizacion' => ['required', 'digits:4'],
             'monto_contado_efectivo' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
             'observacion_cierre' => ['nullable', 'string', 'max:255'],
         ];
@@ -72,6 +74,10 @@ class CloseSesionCajaRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'administrador_id.required' => 'Selecciona el administrador que autoriza el cierre.',
+            'administrador_id.integer' => 'El administrador seleccionado no es válido.',
+            'pin_autorizacion.required' => 'Ingresa el PIN administrativo.',
+            'pin_autorizacion.digits' => 'El PIN administrativo debe tener exactamente 4 dígitos.',
             'monto_contado_efectivo.required' => 'Ingresa el efectivo contado al cierre.',
             'monto_contado_efectivo.numeric' => 'El efectivo contado debe ser un número válido.',
             'monto_contado_efectivo.decimal' => 'El efectivo contado puede tener hasta dos decimales.',

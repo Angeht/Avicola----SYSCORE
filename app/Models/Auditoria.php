@@ -44,7 +44,9 @@ class Auditoria extends Model
     public function etiquetaTabla(): string
     {
         return match ($this->tabla_afectada) {
+            'ajustes_cliente' => 'Ajustes de clientes',
             'ajustes_mercaderia' => 'Ajustes de mercadería',
+            'ajustes_proveedor' => 'Ajustes de proveedores',
             'aplicacion_cobranzas' => 'Aplicaciones de abonos',
             'cargas_proveedor' => 'Cargas de proveedor',
             'clientes' => 'Clientes',

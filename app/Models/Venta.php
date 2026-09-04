@@ -55,6 +55,11 @@ class Venta extends Model
         return $this->hasMany(AplicacionCobranza::class, 'venta_id');
     }
 
+    public function ajustesCliente(): HasMany
+    {
+        return $this->hasMany(AjusteCliente::class, 'venta_id');
+    }
+
     public function estaAnulada(): bool
     {
         return $this->anulada_at !== null;

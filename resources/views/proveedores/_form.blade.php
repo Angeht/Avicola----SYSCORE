@@ -12,6 +12,9 @@
     </div>
     <div class="grid gap-5 sm:grid-cols-2">
         <x-form-field name="telefono" label="Teléfono" hint="Opcional · 9 dígitos"><input id="telefono" name="telefono" type="tel" value="{{ old('telefono', $supplier?->telefono) }}" maxlength="9" inputmode="numeric" pattern="[0-9]{9}" data-digits-only autocomplete="tel" class="{{ $inputClasses }}" placeholder="Ej. 999999999" @error('telefono') aria-invalid="true" aria-describedby="telefono-error" @enderror></x-form-field>
+        <x-form-field name="numero_cuenta" label="Número de cuenta / CCI" hint="Opcional · para pagos"><input id="numero_cuenta" name="numero_cuenta" type="text" value="{{ old('numero_cuenta', $supplier?->numero_cuenta) }}" maxlength="100" autocomplete="off" class="{{ $inputClasses }} font-mono uppercase" placeholder="Banco, cuenta o CCI" @error('numero_cuenta') aria-invalid="true" aria-describedby="numero_cuenta-error" @enderror></x-form-field>
+    </div>
+    <div class="grid gap-5">
         <x-form-field name="direccion" label="Dirección" hint="Opcional"><input id="direccion" name="direccion" type="text" value="{{ old('direccion', $supplier?->direccion) }}" maxlength="255" autocomplete="street-address" class="{{ $inputClasses }}" placeholder="Dirección fiscal o planta" @error('direccion') aria-invalid="true" aria-describedby="direccion-error" @enderror></x-form-field>
     </div>
     <label class="flex cursor-pointer items-center justify-between gap-4 border border-line bg-canvas px-4 py-3"><span><span class="block text-sm font-semibold text-ink-950">Proveedor activo</span><span class="mt-0.5 block text-xs text-steel-500">Disponible para nuevas cargas y pagos.</span></span><input type="hidden" name="activo" value="0"><input name="activo" type="checkbox" value="1" class="size-5 accent-signal" @checked((bool) old('activo', $supplier?->activo ?? true))></label>

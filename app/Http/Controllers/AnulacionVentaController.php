@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AnularVentaRequest;
+use App\Models\AjusteCliente;
 use App\Models\Producto;
 use App\Models\Usuario;
 use App\Models\Venta;
@@ -20,6 +21,7 @@ class AnulacionVentaController extends Controller
         abort_unless($user instanceof Usuario && $user->puedeEliminarVentas(), 403);
         abort_if($venta->estaAnulada(), 409, 'Esta venta ya fue eliminada.');
         abort_if($this->hasActiveCollections($venta), 409, 'Anula primero las cobranzas vigentes aplicadas a esta venta.');
+        abort_if($this->hasActiveAdjustments($venta), 409, 'Anula primero los ajustes comerciales vigentes de esta venta.');
 
         $venta->load([
             'cliente:id,nombres_razon_social,nro_documento',
@@ -76,6 +78,19 @@ class AnulacionVentaController extends Controller
                 ]);
             }
 
+            $activeAdjustments = AjusteCliente::query()
+                ->where('venta_id', $lockedSale->getKey())
+                ->vigentes()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+
+            if ($activeAdjustments->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'motivo_anulacion' => 'Anula primero los ajustes comerciales vigentes de esta venta.',
+                ]);
+            }
+
             $lockedSale->update([
                 'anulada_por' => $user->getKey(),
                 'anulada_at' => now(),
@@ -94,5 +109,10 @@ class AnulacionVentaController extends Controller
             ->where('ac.venta_id', $sale->getKey())
             ->whereNull('c.anulada_at')
             ->exists();
+    }
+
+    private function hasActiveAdjustments(Venta $sale): bool
+    {
+        return $sale->ajustesCliente()->vigentes()->exists();
     }
 }

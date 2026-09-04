@@ -338,6 +338,47 @@ class CobranzaControllerTest extends TestCase
         ]);
     }
 
+    public function test_cash_collection_can_close_a_few_cents_with_audited_rounding(): void
+    {
+        $this->travelTo('2026-09-02 10:30:00');
+        $user = $this->userWithPermission('COBRANZAS_REGISTRAR');
+        $user->roles()->firstOrFail()->permisos()->attach(
+            Permiso::query()->where('codigo', 'CLIENTES_AJUSTAR')->firstOrFail(),
+        );
+        $cashSession = SesionCaja::factory()->create([
+            'usuario_id' => $user->id,
+            'fecha_operacion' => '2026-09-02',
+            'monto_apertura' => 100,
+        ]);
+        $client = Cliente::factory()->create();
+        $sale = Venta::factory()->conTotal(100)->create(['cliente_id' => $client->id]);
+        $cashMethod = MedioPago::factory()->efectivo()->create();
+
+        $this->actingAs($user)->post(route('cobranzas.store'), [
+            'cliente_id' => $client->id,
+            'medio_pago_id' => $cashMethod->id,
+            'monto_total' => '99.95',
+            'cerrar_por_redondeo' => '1',
+        ])->assertRedirect();
+
+        $collection = Cobranza::query()->firstOrFail();
+        $this->assertDatabaseHas('ajustes_cliente', [
+            'venta_id' => $sale->id,
+            'cobranza_id' => $collection->id,
+            'tipo' => 'REDONDEO',
+            'monto' => 0.05,
+        ]);
+        $this->assertDatabaseHas('vw_saldos_venta', [
+            'venta_id' => $sale->id,
+            'saldo_pendiente' => 0.00,
+        ]);
+        $this->assertDatabaseHas('vw_resumen_caja_usuario', [
+            'sesion_caja_id' => $cashSession->id,
+            'ingresos_efectivo' => 99.95,
+            'efectivo_esperado' => 199.95,
+        ]);
+    }
+
     public function test_index_filters_collections_and_show_escapes_observations(): void
     {
         $user = $this->userWithPermission('COBRANZAS_REGISTRAR');

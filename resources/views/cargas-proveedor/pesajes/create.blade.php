@@ -17,6 +17,11 @@
             fn ($crateType): bool => (float) $crateType->tara_referencial_kg === 0.0,
         );
         $money = fn (float|int|string|null $value, int $decimals = 2): string => 'S/ '.number_format((float) ($value ?? 0), $decimals, ',', '.');
+        $unitPrice = static function (float|int|string|null $value): string {
+            $formatted = number_format((float) ($value ?? 0), 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
         $quantity = fn (float|int|string|null $value, int $decimals = 0): string => number_format((float) ($value ?? 0), $decimals, ',', '.');
     @endphp
 
@@ -33,7 +38,7 @@
     <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Datos autorizados de la carga">
         <div class="border-l-4 border-hazard bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Proveedor</p><p class="mt-2 font-display text-xl font-extrabold text-ink-950 uppercase">{{ $load->proveedor->nombre_razon_social }}</p><p class="mt-1 text-xs text-steel-500">{{ $load->producto->nombre }}</p></div>
         <div class="border-l-4 border-steel-300 bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Fecha de carga</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $load->fecha_carga->format('d/m/Y') }}</p><p class="mt-1 text-xs text-steel-500">Número {{ $load->numero_carga }}</p></div>
-        <div class="border-l-4 border-signal bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-signal uppercase">Costo autorizado por kg</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $money($load->costo_kg, 4) }}</p><p class="mt-1 text-xs text-steel-500">Se aplicará al peso neto total</p></div>
+        <div class="border-l-4 border-signal bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-signal uppercase">Costo autorizado por kg</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $unitPrice($load->costo_kg) }}</p><p class="mt-1 text-xs text-steel-500">Se aplicará al peso neto total</p></div>
         <div class="industrial-hatch border-l-4 border-hazard bg-ink-950 p-5 text-white shadow-sm"><p class="font-mono text-[8px] tracking-wider text-hazard uppercase">Acumulado actual</p><p class="mt-2 font-display text-3xl font-extrabold">{{ $quantity($summary->peso_neto_kg, 3) }} kg</p><p class="mt-1 text-xs text-steel-300">Costo actual {{ $money($load->costo_total) }}</p></div>
     </section>
 

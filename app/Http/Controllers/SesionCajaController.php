@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreSesionCajaRequest;
 use App\Models\SesionCaja;
 use App\Models\Usuario;
+use App\Services\AutorizacionPinAdministrador;
 use App\Services\ResumenJornadaCaja;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -14,7 +15,10 @@ use Illuminate\Validation\ValidationException;
 
 class SesionCajaController extends Controller
 {
-    public function __construct(private ResumenJornadaCaja $resumenJornada) {}
+    public function __construct(
+        private ResumenJornadaCaja $resumenJornada,
+        private AutorizacionPinAdministrador $autorizacionPin,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -55,11 +59,13 @@ class SesionCajaController extends Controller
         $user = $this->authenticatedUser($request);
 
         return view('caja.create', [
+            'administrators' => $this->autorizacionPin->administradoresDisponibles(),
             'openSession' => SesionCaja::query()
                 ->where('usuario_id', $user->getKey())
                 ->abiertas()
                 ->orderByDesc('id')
                 ->first(),
+            'pinSetupUser' => $user->esAdministrador() ? $user : null,
             'previousClosedSession' => $this->resumenJornada->ultimaSesionCerradaAnterior($user),
         ]);
     }
@@ -68,8 +74,9 @@ class SesionCajaController extends Controller
     {
         $user = $this->authenticatedUser($request);
         $validated = $request->validated();
+        $administrator = $this->autorizacionPin->confirmar($request, 'apertura-caja');
 
-        $cashSession = DB::transaction(function () use ($user, $validated): SesionCaja {
+        $cashSession = DB::transaction(function () use ($administrator, $user, $validated): SesionCaja {
             Usuario::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail();
 
             if (SesionCaja::query()->where('usuario_id', $user->getKey())->abiertas()->exists()) {
@@ -82,6 +89,7 @@ class SesionCajaController extends Controller
                 'usuario_id' => $user->getKey(),
                 'fecha_operacion' => today(),
                 'apertura_at' => now(),
+                'apertura_autorizada_por' => $administrator->getKey(),
                 'monto_apertura' => $validated['monto_apertura'],
             ]);
         }, 3);
@@ -96,7 +104,9 @@ class SesionCajaController extends Controller
         $this->authorizeAccess($user, $sesionCaja);
         $sesionCaja->load([
             'usuario:id,nombres,apellidos,usuario',
+            'aperturaAutorizadaPor:id,nombres,apellidos,usuario',
             'cerradaPor:id,nombres,apellidos,usuario',
+            'cierreAutorizadaPor:id,nombres,apellidos,usuario',
         ]);
 
         return view('caja.show', [

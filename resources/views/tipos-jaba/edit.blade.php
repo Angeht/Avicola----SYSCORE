@@ -4,6 +4,12 @@
 @section('section', 'Jabas y taras')
 
 @section('content')
+    @php
+        $tare = static function (float|int|string|null $value): string {
+            return rtrim(rtrim(number_format((float) ($value ?? 0), 3, ',', '.'), '0'), ',');
+        };
+    @endphp
+
     <div class="reveal-up grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section class="panel-cut corner-frame border border-line bg-paper p-6 shadow-panel sm:p-8" aria-labelledby="crate-form-title">
             <p class="font-mono text-[10px] font-semibold tracking-[0.22em] text-signal uppercase">Jabas / Calibración</p>
@@ -21,7 +27,7 @@
             <h2 id="crate-status-title" class="mt-4 font-display text-2xl font-bold tracking-wide uppercase">Control de tara</h2>
             <dl class="mt-7 grid gap-5 border-t border-white/10 pt-5">
                 <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Estado actual</dt><dd class="mt-2"><x-status-badge :active="$crateType->activo" /></dd></div>
-                <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Tara registrada</dt><dd class="mt-1 font-mono text-3xl font-bold text-white">{{ number_format((float) $crateType->tara_referencial_kg, 3) }} <span class="text-sm text-hazard">kg</span></dd></div>
+                <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Tara registrada</dt><dd class="mt-1 font-mono text-3xl font-bold text-white">{{ $tare($crateType->tara_referencial_kg) }} <span class="text-sm text-hazard">kg</span></dd></div>
                 <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Última actualización</dt><dd class="mt-1 text-sm text-white">{{ $crateType->updated_at->translatedFormat('d M Y · H:i') }}</dd></div>
             </dl>
             @if ((float) $crateType->tara_referencial_kg <= 0)

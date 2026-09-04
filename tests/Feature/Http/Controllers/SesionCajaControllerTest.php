@@ -32,9 +32,12 @@ class SesionCajaControllerTest extends TestCase
     {
         $this->travelTo('2026-08-27 07:45:30');
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $otherUser = Usuario::factory()->create();
 
         $response = $this->actingAs($user)->post(route('caja.store'), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_apertura' => '250.50',
             'usuario_id' => $otherUser->id,
             'fecha_operacion' => '2000-01-01',
@@ -50,6 +53,7 @@ class SesionCajaControllerTest extends TestCase
             'usuario_id' => $user->id,
             'fecha_operacion' => '2026-08-27',
             'apertura_at' => '2026-08-27 07:45:30',
+            'apertura_autorizada_por' => $administrator->id,
             'monto_apertura' => 250.50,
             'cierre_at' => null,
         ]);
@@ -85,10 +89,31 @@ class SesionCajaControllerTest extends TestCase
         $this->assertDatabaseCount('sesiones_caja', 1);
     }
 
+    public function test_wrong_administrator_pin_does_not_open_the_day_or_flash_the_pin(): void
+    {
+        $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
+
+        $response = $this->actingAs($user)
+            ->from(route('caja.create'))
+            ->post(route('caja.store'), [
+                'administrador_id' => $administrator->id,
+                'pin_autorizacion' => '9999',
+                'monto_apertura' => '100.00',
+            ]);
+
+        $response->assertSessionHasErrors([
+            'pin_autorizacion' => 'El administrador o el PIN no son correctos.',
+        ]);
+        $this->assertDatabaseCount('sesiones_caja', 0);
+        $this->assertArrayNotHasKey('pin_autorizacion', session('_old_input', []));
+    }
+
     public function test_opening_form_preloads_previous_closing_cash_and_keeps_it_editable(): void
     {
         $this->travelTo('2026-08-30 07:30:00');
         $user = $this->userWithPermission();
+        $administrator = $this->administratorWithPin();
         $olderSession = SesionCaja::factory()->cerrada()->create([
             'usuario_id' => $user->id,
             'fecha_operacion' => '2026-08-28',
@@ -114,15 +139,20 @@ class SesionCajaControllerTest extends TestCase
             ->assertSee("Jornada #{$previousSession->id}")
             ->assertDontSee("Jornada #{$olderSession->id}")
             ->assertSee('value="342.75"', false)
+            ->assertSee($administrator->nombreCompleto())
+            ->assertSee('PIN administrativo')
             ->assertSee('puedes corregirlo');
 
         $this->actingAs($user)->post(route('caja.store'), [
+            'administrador_id' => $administrator->id,
+            'pin_autorizacion' => '0427',
             'monto_apertura' => '400.00',
         ])->assertRedirect();
 
         $this->assertDatabaseHas('sesiones_caja', [
             'usuario_id' => $user->id,
             'fecha_operacion' => '2026-08-30',
+            'apertura_autorizada_por' => $administrator->id,
             'monto_apertura' => 400.00,
             'cierre_at' => null,
         ]);
@@ -180,5 +210,19 @@ class SesionCajaControllerTest extends TestCase
         $user->roles()->attach($role);
 
         return $user;
+    }
+
+    private function administratorWithPin(string $pin = '0427'): Usuario
+    {
+        $administrator = Usuario::factory()->create([
+            'pin_autorizacion_hash' => $pin,
+        ]);
+        $role = Rol::factory()->create([
+            'nombre' => 'ADMINISTRADOR',
+            'activo' => true,
+        ]);
+        $administrator->roles()->attach($role);
+
+        return $administrator;
     }
 }

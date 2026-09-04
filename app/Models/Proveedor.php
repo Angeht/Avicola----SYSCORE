@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
-#[Fillable(['tipo_documento_id', 'nro_documento', 'nombre_razon_social', 'telefono', 'direccion', 'activo'])]
+#[Fillable(['tipo_documento_id', 'nro_documento', 'nombre_razon_social', 'telefono', 'numero_cuenta', 'direccion', 'activo'])]
 class Proveedor extends Model
 {
     /** @use HasFactory<ProveedorFactory> */
@@ -37,6 +37,7 @@ class Proveedor extends Model
             $query->where('nombre_razon_social', 'like', $term)
                 ->orWhere('nro_documento', 'like', $term)
                 ->orWhere('telefono', 'like', $term)
+                ->orWhere('numero_cuenta', 'like', $term)
                 ->orWhere('direccion', 'like', $term);
         });
     }

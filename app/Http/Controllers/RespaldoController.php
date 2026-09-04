@@ -3,11 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Contracts\GestorRespaldos;
-use App\Models\ConfiguracionRespaldo;
 use App\Models\Respaldo;
 use App\Models\RestauracionRespaldo;
 use App\Models\Usuario;
-use App\Services\TareaProgramadaWindows;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +15,7 @@ use Throwable;
 
 class RespaldoController extends Controller
 {
-    public function index(Request $request, GestorRespaldos $manager, TareaProgramadaWindows $scheduledTask): View
+    public function index(Request $request, GestorRespaldos $manager): View
     {
         $user = $this->authenticatedUser($request);
         $backups = Respaldo::query()
@@ -32,7 +30,6 @@ class RespaldoController extends Controller
 
         return view('respaldos.index', [
             'backups' => $backups,
-            'configuration' => ConfiguracionRespaldo::singleton()->load('actualizadoPor:id,nombres,apellidos,usuario'),
             'engineAvailable' => $manager->motorDisponible(),
             'lastBackup' => Respaldo::query()
                 ->where('estado', Respaldo::ESTADO_COMPLETADO)
@@ -45,8 +42,6 @@ class RespaldoController extends Controller
                 ->orderByDesc('id')
                 ->limit(8)
                 ->get(),
-            'schedulerCompatible' => $scheduledTask->esCompatible(),
-            'schedulerInstalled' => $scheduledTask->estaInstalada(),
             'storageBytes' => (int) Respaldo::query()
                 ->where('estado', Respaldo::ESTADO_COMPLETADO)
                 ->whereNull('eliminado_at')

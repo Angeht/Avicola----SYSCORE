@@ -55,6 +55,12 @@ class AnularAjusteMercaderiaRequest extends FormRequest
                     return;
                 }
 
+                if ($adjustment->ajusteCliente()->exists() || $adjustment->ajusteProveedor()->exists()) {
+                    $validator->errors()->add('motivo_anulacion', 'Anula la devolución desde la venta o la carga correspondiente.');
+
+                    return;
+                }
+
                 $type = TipoAjusteMercaderia::query()->find($adjustment->tipo_ajuste_id);
 
                 if ($type?->naturaleza !== 'ENTRADA') {

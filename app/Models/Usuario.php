@@ -79,6 +79,16 @@ class Usuario extends Authenticatable
         return $this->hasMany(AjusteMercaderia::class, 'anulado_por');
     }
 
+    public function ajustesClienteRegistrados(): HasMany
+    {
+        return $this->hasMany(AjusteCliente::class, 'usuario_id');
+    }
+
+    public function ajustesProveedorRegistrados(): HasMany
+    {
+        return $this->hasMany(AjusteProveedor::class, 'usuario_id');
+    }
+
     public function conciliacionesMercaderia(): HasMany
     {
         return $this->hasMany(ConciliacionMercaderia::class, 'usuario_id');

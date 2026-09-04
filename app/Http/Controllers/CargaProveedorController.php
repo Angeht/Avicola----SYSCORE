@@ -130,6 +130,7 @@ class CargaProveedorController extends Controller
             'producto.unidadMedida:id,codigo,nombre,simbolo',
             'recibidoPor:id,nombres,apellidos,usuario',
             'anuladaPor:id,nombres,apellidos,usuario',
+            'anulacionAutorizadaPor:id,nombres,apellidos,usuario',
             'pesajes' => fn ($query) => $query
                 ->select(['id', 'carga_id', 'tipo_jaba_id', 'cantidad_jabas', 'cantidad_pollos', 'peso_bruto_kg', 'tara_unitaria_aplicada_kg', 'observacion', 'editado_por', 'autorizado_por', 'editado_at', 'created_at'])
                 ->with([
@@ -146,6 +147,17 @@ class CargaProveedorController extends Controller
                     'anuladaPor:id,nombres,apellidos,usuario',
                 ])
                 ->orderByDesc('pagado_at')
+                ->orderByDesc('id'),
+            'ajustesProveedor' => fn ($query) => $query
+                ->select(['id', 'numero_ajuste', 'carga_id', 'pago_proveedor_id', 'ajuste_mercaderia_id', 'tipo', 'monto', 'motivo', 'usuario_id', 'fecha_ajuste', 'anulado_por', 'anulado_at', 'motivo_anulacion'])
+                ->with([
+                    'usuario:id,nombres,apellidos,usuario',
+                    'anuladoPor:id,nombres,apellidos,usuario',
+                    'pagoProveedor:id,numero_pago',
+                    'ajusteMercaderia:id,numero_ajuste,producto_id,cantidad_pollos,peso_kg,anulado_at',
+                    'ajusteMercaderia.producto:id,nombre',
+                ])
+                ->orderByDesc('fecha_ajuste')
                 ->orderByDesc('id'),
         ]);
 

@@ -44,10 +44,10 @@
                     <input id="fecha_carga" name="fecha_carga" value="{{ old('fecha_carga', today()->toDateString()) }}" type="date" max="{{ today()->toDateString() }}" class="min-h-12 w-full border border-line bg-white px-4 text-sm font-semibold text-ink-950 outline-none transition focus:border-signal focus:ring-2 focus:ring-signal/15" required>
                 </x-form-field>
 
-                <x-form-field name="costo_kg" label="Costo por kg" hint="Hasta 4 decimales" required>
+                <x-form-field name="costo_kg" label="Costo por kg" hint="Usa 2 decimales; admite hasta 4 si los necesitas" required>
                     <div class="flex min-h-12 border border-line bg-white transition focus-within:border-signal focus-within:ring-2 focus-within:ring-signal/15">
                         <span class="grid w-12 shrink-0 place-items-center border-r border-line bg-canvas font-display text-lg font-bold text-ink-950">S/</span>
-                        <input id="costo_kg" name="costo_kg" value="{{ old('costo_kg') }}" type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" placeholder="0.0000" class="min-w-0 flex-1 px-4 text-sm font-semibold text-ink-950 outline-none placeholder:text-steel-300" required>
+                        <input id="costo_kg" name="costo_kg" value="{{ old('costo_kg') }}" type="number" min="0.0001" max="99999999.9999" step="0.0001" inputmode="decimal" placeholder="0.00" class="min-w-0 flex-1 px-4 text-sm font-semibold text-ink-950 outline-none placeholder:text-steel-300" required>
                     </div>
                 </x-form-field>
 

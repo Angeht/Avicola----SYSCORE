@@ -222,6 +222,10 @@ class AjusteMercaderiaController extends Controller
             return 'Este ajuste está vinculado a una conciliación de mercadería y no puede anularse.';
         }
 
+        if ($adjustment->ajusteCliente()->exists() || $adjustment->ajusteProveedor()->exists()) {
+            return 'Este movimiento pertenece a una devolución comercial. Anúlala desde la venta o la carga correspondiente.';
+        }
+
         if (! $adjustment->tipoAjuste->esEntrada()) {
             return null;
         }

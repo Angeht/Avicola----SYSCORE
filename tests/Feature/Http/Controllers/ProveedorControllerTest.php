@@ -46,6 +46,18 @@ class ProveedorControllerTest extends TestCase
             ->assertDontSee('Proveedor Oculto');
     }
 
+    public function test_crate_and_tare_management_is_available_from_the_supplier_catalog(): void
+    {
+        $user = $this->userWithPermissions('CARGAS_REGISTRAR', 'TIPOS_JABA_GESTIONAR');
+
+        $response = $this->actingAs($user)->get(route('proveedores.index'));
+
+        $response
+            ->assertOk()
+            ->assertSee('Jabas y taras')
+            ->assertSee(route('tipos-jaba.index'), false);
+    }
+
     public function test_valid_payload_creates_normalized_supplier(): void
     {
         $user = $this->userWithPermission('CARGAS_REGISTRAR');
@@ -59,6 +71,7 @@ class ProveedorControllerTest extends TestCase
             'nro_documento' => '20123456789',
             'nombre_razon_social' => '  Granja   San José  ',
             'telefono' => '987000111',
+            'numero_cuenta' => '  bcp 191-12345678-0-12 ',
             'direccion' => ' Carretera   Norte ',
             'activo' => '1',
         ]);
@@ -71,6 +84,7 @@ class ProveedorControllerTest extends TestCase
             'nro_documento' => '20123456789',
             'nombre_razon_social' => 'Granja San José',
             'telefono' => '987000111',
+            'numero_cuenta' => 'BCP 191-12345678-0-12',
             'direccion' => 'Carretera Norte',
             'activo' => 1,
         ]);
@@ -135,6 +149,7 @@ class ProveedorControllerTest extends TestCase
         $documentType = TipoDocumento::factory()->create();
         $supplier = Proveedor::factory()->conDocumento($documentType)->inactivo()->create([
             'nro_documento' => 'RUC-002',
+            'numero_cuenta' => 'CCI 002-12345678901234567890',
         ]);
 
         $response = $this->actingAs($user)->put(route('proveedores.update', $supplier), [
@@ -142,6 +157,7 @@ class ProveedorControllerTest extends TestCase
             'nro_documento' => 'RUC-002',
             'nombre_razon_social' => 'Proveedor reactivado',
             'telefono' => null,
+            'numero_cuenta' => ' BCP 191-00000000-0-00 ',
             'direccion' => null,
             'activo' => '1',
         ]);
@@ -153,6 +169,7 @@ class ProveedorControllerTest extends TestCase
             'id' => $supplier->id,
             'nro_documento' => 'RUC-002',
             'nombre_razon_social' => 'Proveedor reactivado',
+            'numero_cuenta' => 'BCP 191-00000000-0-00',
             'activo' => 1,
         ]);
     }
@@ -173,11 +190,20 @@ class ProveedorControllerTest extends TestCase
 
     private function userWithPermission(string $code): Usuario
     {
+        return $this->userWithPermissions($code);
+    }
+
+    private function userWithPermissions(string ...$codes): Usuario
+    {
         $user = Usuario::factory()->create();
         $role = Rol::factory()->create();
-        $permission = Permiso::factory()->create(['codigo' => $code]);
+        $permissions = collect($codes)
+            ->map(fn (string $code): Permiso => Permiso::query()->firstOrCreate(
+                ['codigo' => $code],
+                ['nombre' => $code, 'descripcion' => "Permiso $code"],
+            ));
 
-        $role->permisos()->attach($permission);
+        $role->permisos()->attach($permissions->pluck('id')->all());
         $user->roles()->attach($role);
 
         return $user;

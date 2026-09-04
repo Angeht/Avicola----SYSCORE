@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Http\Controllers;
 
+use App\Models\AjusteProveedor;
+use App\Models\CargaProveedor;
 use App\Models\Cliente;
 use App\Models\Cobranza;
 use App\Models\ConfiguracionEmpresa;
@@ -12,6 +14,7 @@ use App\Models\PesajeVenta;
 use App\Models\PrecioDia;
 use App\Models\PrecioDiaVersion;
 use App\Models\Producto;
+use App\Models\Proveedor;
 use App\Models\Rol;
 use App\Models\SesionCaja;
 use App\Models\Usuario;
@@ -35,6 +38,7 @@ class ReporteControllerTest extends TestCase
     {
         $user = Usuario::factory()->create();
         $client = Cliente::factory()->create();
+        $provider = Proveedor::factory()->create();
 
         $this->actingAs($user)
             ->get(route('reportes.index'))
@@ -45,6 +49,10 @@ class ReporteControllerTest extends TestCase
             route('reportes.customer-account.csv', $client),
             route('reportes.customer-account.print', $client),
             route('reportes.customer-account.ticket', $client),
+            route('reportes.supplier-account', $provider),
+            route('reportes.supplier-account.csv', $provider),
+            route('reportes.supplier-account.print', $provider),
+            route('reportes.supplier-account.ticket', $provider),
         ] as $route) {
             $this->actingAs($user)
                 ->get($route)
@@ -92,6 +100,8 @@ class ReporteControllerTest extends TestCase
             ->assertSee($sale->numero_venta)
             ->assertSee('Cliente objetivo')
             ->assertSee('POLLO OBJETIVO')
+            ->assertSee('S/ 8,50')
+            ->assertDontSee('S/ 8,5000')
             ->assertDontSee($hiddenSale->numero_venta);
     }
 
@@ -148,7 +158,7 @@ class ReporteControllerTest extends TestCase
 
         $csv->assertOk()->assertDownload();
         $this->assertStringContainsString(
-            'Cliente;"Ventas realizadas";"Total deuda";"Total abonado";"Restante por pagar";Cobros;"Último pago";Estado',
+            'Cliente;"Ventas realizadas";"Total deuda";"Total abonado";"Descuentos y devoluciones";"Restante por pagar";Cobros;"Último pago";Estado',
             $csv->streamedContent(),
         );
     }
@@ -203,6 +213,9 @@ class ReporteControllerTest extends TestCase
                     'total_sales' => 340,
                     'collections_count' => 2,
                     'total_collections' => 120,
+                    'adjustments_count' => 0,
+                    'total_adjustments' => 0,
+                    'total_credits' => 120,
                     'remaining' => 220,
                     'credit' => 0,
                 ], $summary);
@@ -227,7 +240,7 @@ class ReporteControllerTest extends TestCase
             ->assertSee('Estado de cuenta')
             ->assertSee('Cliente con estado detallado')
             ->assertSee('Total de ventas')
-            ->assertSee('Total abonado')
+            ->assertSee('Pagos y ajustes')
             ->assertSee('Restante por pagar')
             ->assertSee(route('ventas.show', $firstSale), false)
             ->assertSee(route('cobranzas.show', $firstCollection), false)
@@ -388,6 +401,9 @@ class ReporteControllerTest extends TestCase
                 'total_sales' => 170,
                 'collections_count' => 1,
                 'total_collections' => 50,
+                'adjustments_count' => 0,
+                'total_adjustments' => 0,
+                'total_credits' => 50,
                 'remaining' => 120,
                 'credit' => 0,
             ])
@@ -426,6 +442,9 @@ class ReporteControllerTest extends TestCase
                 'total_sales' => 0,
                 'collections_count' => 0,
                 'total_collections' => 0,
+                'adjustments_count' => 0,
+                'total_adjustments' => 0,
+                'total_credits' => 0,
                 'remaining' => 0,
                 'credit' => 0,
             ])
@@ -442,6 +461,345 @@ class ReporteControllerTest extends TestCase
         $this->actingAs($user)
             ->get(route('reportes.customer-account', [
                 'cliente' => $client,
+                'hasta' => '30/08/2026',
+            ]))
+            ->assertSessionHasErrors([
+                'hasta' => 'La fecha de corte no es válida.',
+            ]);
+    }
+
+    public function test_supplier_debt_report_consolidates_loads_payments_and_adjustments_by_provider(): void
+    {
+        $this->travelTo('2026-08-30 12:00:00');
+        $user = $this->userWithPermission('REPORTES_VER');
+        $provider = Proveedor::factory()->create([
+            'nombre_razon_social' => 'GRANJA CONSOLIDADA',
+            'numero_cuenta' => 'CCI 001-987654',
+        ]);
+        $firstLoad = CargaProveedor::factory()->create([
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-20',
+            'costo_total' => 100,
+        ]);
+        $secondLoad = CargaProveedor::factory()->create([
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-21',
+            'costo_total' => 200,
+        ]);
+        PagoProveedor::factory()->create([
+            'carga_id' => $firstLoad->id,
+            'monto' => 60,
+            'pagado_at' => '2026-08-22 10:00:00',
+        ]);
+        PagoProveedor::factory()->create([
+            'carga_id' => $secondLoad->id,
+            'monto' => 40,
+            'pagado_at' => '2026-08-23 10:00:00',
+        ]);
+        AjusteProveedor::factory()->create([
+            'carga_id' => $secondLoad->id,
+            'monto' => 20,
+            'fecha_ajuste' => '2026-08-24 10:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reportes.show', [
+            'report' => 'deudas-proveedores',
+            'hasta' => '2026-08-30',
+            'proveedor_id' => $provider->id,
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertSee('GRANJA CONSOLIDADA')
+            ->assertSee('CCI 001-987654')
+            ->assertSee('S/ 300,00')
+            ->assertSee('S/ 100,00')
+            ->assertSee('S/ 20,00')
+            ->assertSee('S/ 180,00')
+            ->assertSee('Ver cargas y abonos')
+            ->assertSee(route('reportes.supplier-account', [
+                'proveedor' => $provider,
+                'hasta' => '2026-08-30',
+            ]), false)
+            ->assertViewHas('rows', fn ($rows): bool => $rows->total() === 1)
+            ->assertViewHas('summary', [
+                ['label' => 'Proveedores', 'value' => 1, 'format' => 'integer'],
+                ['label' => 'Cargas', 'value' => 2, 'format' => 'integer'],
+                ['label' => 'Pagado y ajustado', 'value' => 120.0, 'format' => 'money'],
+                ['label' => 'Deuda acumulada', 'value' => 180.0, 'format' => 'money'],
+            ]);
+    }
+
+    public function test_supplier_account_lists_all_loads_payments_adjustments_and_running_balance(): void
+    {
+        $this->travelTo('2026-08-30 12:00:00');
+        $user = $this->userWithPermission('REPORTES_VER');
+        $provider = Proveedor::factory()->create([
+            'nombre_razon_social' => 'PROVEEDOR DETALLADO',
+            'numero_cuenta' => 'CTA 889900',
+        ]);
+        $firstLoad = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-DETALLE-000001',
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-20',
+            'costo_total' => 100,
+        ]);
+        $payment = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-DETALLE-000001',
+            'carga_id' => $firstLoad->id,
+            'monto' => 50,
+            'pagado_at' => '2026-08-20 12:00:00',
+        ]);
+        $secondLoad = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-DETALLE-000002',
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-21',
+            'costo_total' => 200,
+        ]);
+        $adjustment = AjusteProveedor::factory()->create([
+            'numero_ajuste' => 'AJP-DETALLE-000001',
+            'carga_id' => $secondLoad->id,
+            'monto' => 20,
+            'fecha_ajuste' => '2026-08-22 10:00:00',
+        ]);
+        $futurePayment = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-FUTURO-000001',
+            'carga_id' => $secondLoad->id,
+            'monto' => 10,
+            'pagado_at' => '2026-08-31 09:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reportes.supplier-account', [
+            'proveedor' => $provider,
+            'hasta' => '2026-08-30',
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertViewIs('reportes.supplier-account')
+            ->assertViewHas('status', 'PARCIAL')
+            ->assertViewHas('summary', [
+                'loads_count' => 2,
+                'total_loads' => 300,
+                'payments_count' => 1,
+                'total_payments' => 50,
+                'adjustments_count' => 1,
+                'total_adjustments' => 20,
+                'total_credits' => 70,
+                'remaining' => 230,
+            ])
+            ->assertViewHas('movements', function ($movements) use ($firstLoad, $payment, $secondLoad, $adjustment): bool {
+                $rows = $movements->getCollection();
+
+                $this->assertSame([
+                    $firstLoad->numero_carga,
+                    $payment->numero_pago,
+                    $secondLoad->numero_carga,
+                    $adjustment->numero_ajuste,
+                ], $rows->pluck('documento')->all());
+                $this->assertSame([100.0, 50.0, 250.0, 230.0], $rows
+                    ->map(fn (object $row): float => (float) $row->saldo_acumulado)
+                    ->all());
+
+                return true;
+            })
+            ->assertSee('PROVEEDOR DETALLADO')
+            ->assertSee('CTA 889900')
+            ->assertSee(route('cargas-proveedor.show', $firstLoad), false)
+            ->assertSee(route('pagos-proveedor.show', $payment), false)
+            ->assertSee(route('reportes.supplier-account.csv', [
+                'proveedor' => $provider,
+                'hasta' => '2026-08-30',
+            ]), false)
+            ->assertSee(route('reportes.supplier-account.print', [
+                'proveedor' => $provider,
+                'hasta' => '2026-08-30',
+            ]), false)
+            ->assertSee(route('reportes.supplier-account.ticket', [
+                'proveedor' => $provider,
+                'hasta' => '2026-08-30',
+            ]), false)
+            ->assertDontSee($futurePayment->numero_pago);
+    }
+
+    public function test_supplier_account_csv_download_contains_summary_account_and_all_movements(): void
+    {
+        $this->travelTo('2026-08-30 12:00:00');
+        $user = $this->userWithPermission('REPORTES_VER');
+        $provider = Proveedor::factory()->create([
+            'nombre_razon_social' => 'Proveedor exportable',
+            'numero_cuenta' => '=SUM(1+1)',
+        ]);
+        $load = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-EXPORTAR-000001',
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-28',
+            'costo_total' => 180,
+        ]);
+        $payment = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-EXPORTAR-000001',
+            'carga_id' => $load->id,
+            'monto' => 50,
+            'pagado_at' => '2026-08-29 09:00:00',
+        ]);
+        $adjustment = AjusteProveedor::factory()->create([
+            'numero_ajuste' => 'AJP-EXPORTAR-000001',
+            'carga_id' => $load->id,
+            'monto' => 20,
+            'fecha_ajuste' => '2026-08-30 09:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reportes.supplier-account.csv', [
+            'proveedor' => $provider,
+            'hasta' => '2026-08-30',
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertDownload('estado-de-cuenta-proveedor-exportable-2026-08-30.csv')
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $content = $response->streamedContent();
+
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $content);
+        $this->assertStringContainsString('Proveedor;"Proveedor exportable"', $content);
+        $this->assertStringContainsString("'=SUM(1+1)", $content);
+        $this->assertStringContainsString('"Total de cargas";180.00', $content);
+        $this->assertStringContainsString('"Total pagado";50.00', $content);
+        $this->assertStringContainsString('"Total ajustado";20.00', $content);
+        $this->assertStringContainsString('"Deuda acumulada";110.00', $content);
+        $this->assertStringContainsString('Fecha;Movimiento;Documento;Carga;Detalle;"Carga (cargo)";"Abono / ajuste";"Saldo acumulado"', $content);
+        $this->assertStringContainsString($load->numero_carga, $content);
+        $this->assertStringContainsString($payment->numero_pago, $content);
+        $this->assertStringContainsString($adjustment->numero_ajuste, $content);
+    }
+
+    public function test_supplier_account_print_view_can_be_saved_as_pdf(): void
+    {
+        $this->travelTo('2026-08-30 12:00:00');
+        $user = $this->userWithPermission('REPORTES_VER');
+        $provider = Proveedor::factory()->create([
+            'nombre_razon_social' => 'Proveedor imprimible',
+            'numero_cuenta' => 'CCI 001-445566',
+        ]);
+        $load = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-IMPRIMIR-000001',
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-28',
+            'costo_total' => 180,
+        ]);
+        $payment = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-IMPRIMIR-000001',
+            'carga_id' => $load->id,
+            'monto' => 50,
+            'pagado_at' => '2026-08-29 09:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reportes.supplier-account.print', [
+            'proveedor' => $provider,
+            'hasta' => '2026-08-30',
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertViewIs('reportes.supplier-account-print')
+            ->assertSee('Imprimir / Guardar como PDF')
+            ->assertSee('Proveedor imprimible')
+            ->assertSee('CCI 001-445566')
+            ->assertSee('S/ 180,00')
+            ->assertSee('S/ 50,00')
+            ->assertSee('S/ 130,00')
+            ->assertSee($load->numero_carga)
+            ->assertSee($payment->numero_pago);
+    }
+
+    public function test_supplier_account_ticket_prints_only_the_current_debt_cycle(): void
+    {
+        $this->travelTo('2026-08-30 12:00:00');
+        $user = $this->userWithPermission('REPORTES_VER');
+        ConfiguracionEmpresa::factory()->create([
+            'nombre_comercial' => 'AVÍCOLA DEL VALLE',
+            'mensaje_ticket' => 'Conserve este ticket.',
+        ]);
+        $provider = Proveedor::factory()->create([
+            'nombre_razon_social' => 'Proveedor por ciclos',
+            'numero_cuenta' => 'CTA 778899',
+        ]);
+        $settledLoad = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-CICLO-CERRADO-001',
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-20',
+            'costo_total' => 100,
+        ]);
+        $settlement = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-CIERRE-CICLO-001',
+            'carga_id' => $settledLoad->id,
+            'monto' => 100,
+            'pagado_at' => '2026-08-21 09:00:00',
+        ]);
+        $product = Producto::factory()->create(['nombre' => 'POLLO <script>alert("x")</script>']);
+        $currentLoad = CargaProveedor::factory()->create([
+            'numero_carga' => 'CAR-CICLO-VIGENTE-001',
+            'producto_id' => $product->id,
+            'proveedor_id' => $provider->id,
+            'fecha_carga' => '2026-08-22',
+            'costo_total' => 200,
+        ]);
+        $currentPayment = PagoProveedor::factory()->create([
+            'numero_pago' => 'PAG-CICLO-VIGENTE-001',
+            'carga_id' => $currentLoad->id,
+            'monto' => 50,
+            'pagado_at' => '2026-08-23 09:00:00',
+        ]);
+        $currentAdjustment = AjusteProveedor::factory()->create([
+            'numero_ajuste' => 'AJP-CICLO-VIGENTE-001',
+            'carga_id' => $currentLoad->id,
+            'monto' => 20,
+            'fecha_ajuste' => '2026-08-24 09:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('reportes.supplier-account.ticket', [
+            'proveedor' => $provider,
+            'hasta' => '2026-08-30',
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertViewIs('reportes.supplier-account-ticket')
+            ->assertViewHas('cycleReset', true)
+            ->assertViewHas('summary', [
+                'loads_count' => 1,
+                'total_loads' => 200,
+                'payments_count' => 1,
+                'total_payments' => 50,
+                'adjustments_count' => 1,
+                'total_adjustments' => 20,
+                'total_credits' => 70,
+                'remaining' => 130,
+            ])
+            ->assertSee('AVÍCOLA DEL VALLE')
+            ->assertSee('Proveedor por ciclos')
+            ->assertSee('CTA 778899')
+            ->assertSee('Este ticket comienza desde la carga siguiente')
+            ->assertSee($currentLoad->numero_carga)
+            ->assertSee($currentPayment->numero_pago)
+            ->assertSee($currentAdjustment->numero_ajuste)
+            ->assertSee('S/ 130,00')
+            ->assertSee('Conserve este ticket.')
+            ->assertSee('window.print()', false)
+            ->assertDontSee($settledLoad->numero_carga)
+            ->assertDontSee($settlement->numero_pago)
+            ->assertDontSee('<script>alert("x")</script>', false);
+    }
+
+    public function test_supplier_account_rejects_an_invalid_cutoff(): void
+    {
+        $user = $this->userWithPermission('REPORTES_VER');
+        $provider = Proveedor::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('reportes.supplier-account', [
+                'proveedor' => $provider,
                 'hasta' => '30/08/2026',
             ]))
             ->assertSessionHasErrors([

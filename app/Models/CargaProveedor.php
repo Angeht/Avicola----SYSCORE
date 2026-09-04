@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-#[Fillable(['numero_carga', 'proveedor_id', 'producto_id', 'fecha_carga', 'costo_kg', 'costo_total', 'recibido_por', 'observacion', 'anulada_por', 'anulada_at', 'motivo_anulacion'])]
+#[Fillable(['numero_carga', 'proveedor_id', 'producto_id', 'fecha_carga', 'costo_kg', 'costo_total', 'recibido_por', 'observacion', 'anulada_por', 'anulacion_autorizada_por', 'anulada_at', 'motivo_anulacion'])]
 class CargaProveedor extends Model
 {
     /** @use HasFactory<CargaProveedorFactory> */
@@ -40,6 +40,11 @@ class CargaProveedor extends Model
         return $this->belongsTo(Usuario::class, 'anulada_por');
     }
 
+    public function anulacionAutorizadaPor(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'anulacion_autorizada_por');
+    }
+
     public function pesajes(): HasMany
     {
         return $this->hasMany(PesajeCarga::class, 'carga_id');
@@ -48,6 +53,11 @@ class CargaProveedor extends Model
     public function pagosProveedor(): HasMany
     {
         return $this->hasMany(PagoProveedor::class, 'carga_id');
+    }
+
+    public function ajustesProveedor(): HasMany
+    {
+        return $this->hasMany(AjusteProveedor::class, 'carga_id');
     }
 
     public function procesosBeneficiado(): HasMany

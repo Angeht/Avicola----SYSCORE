@@ -5,7 +5,11 @@
 
 @section('content')
     @php
-        $money = fn (float|int|string|null $value): string => 'S/ '.number_format((float) ($value ?? 0), 4, ',', '.');
+        $unitPrice = static function (float|int|string|null $value): string {
+            $formatted = number_format((float) ($value ?? 0), 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
         $selectedDate = Illuminate\Support\Carbon::parse($date);
     @endphp
 
@@ -72,7 +76,7 @@
                         @foreach ($prices as $price)
                             <tr class="transition hover:bg-hazard-soft/20">
                                 <td class="px-6 py-4"><p class="font-semibold text-ink-950">{{ $price->producto->nombre }}</p><p class="mt-1 font-mono text-[8px] tracking-wider text-steel-500 uppercase">{{ $price->producto->activo ? 'Producto activo' : 'Producto inactivo' }}</p></td>
-                                <td class="px-6 py-4"><span class="font-display text-2xl font-extrabold text-ink-950">{{ $price->versionVigente ? $money($price->versionVigente->precio_kg) : 'Sin versión' }}</span><span class="ml-1 text-xs text-steel-500">/ kg</span></td>
+                                <td class="px-6 py-4"><span class="font-display text-2xl font-extrabold text-ink-950">{{ $price->versionVigente ? $unitPrice($price->versionVigente->precio_kg) : 'Sin versión' }}</span><span class="ml-1 text-xs text-steel-500">/ kg</span></td>
                                 <td class="px-6 py-4"><p class="text-sm text-ink-700">{{ $price->versionVigente?->vigente_desde?->format('H:i:s') ?? '—' }}</p><p class="mt-1 text-xs text-steel-500">{{ $price->versionVigente?->registradoPor?->nombreCompleto() ?? 'Sin responsable' }}</p></td>
                                 <td class="px-6 py-4"><span class="inline-flex border border-line bg-canvas px-2.5 py-1 font-mono text-[9px] font-semibold text-ink-700 uppercase">{{ $price->versiones_count }} {{ $price->versiones_count === 1 ? 'versión' : 'versiones' }}</span></td>
                                 <td class="px-6 py-4"><div class="flex justify-end gap-2"><a href="{{ route('precios-dia.show', $price) }}" class="inline-flex min-h-9 items-center border border-line px-3 font-mono text-[9px] font-semibold tracking-wider text-ink-700 uppercase transition hover:border-ink-950 hover:bg-ink-950 hover:text-white">Historial</a>@if ($date === today()->toDateString())<a href="{{ route('precios-dia.create', ['producto' => $price->producto_id]) }}" class="inline-flex min-h-9 items-center border border-hazard/50 bg-hazard-soft px-3 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase transition hover:bg-hazard">Cambiar precio</a>@endif</div></td>
@@ -85,7 +89,7 @@
             <div class="divide-y divide-line md:hidden">
                 @foreach ($prices as $price)
                     <article class="p-5">
-                        <div class="flex items-start justify-between gap-4"><div><p class="font-semibold text-ink-950">{{ $price->producto->nombre }}</p><p class="mt-1 font-mono text-[8px] tracking-wider text-steel-500 uppercase">{{ $price->versiones_count }} {{ $price->versiones_count === 1 ? 'versión' : 'versiones' }}</p></div><span class="font-display text-2xl font-extrabold text-ink-950">{{ $price->versionVigente ? $money($price->versionVigente->precio_kg) : '—' }}</span></div>
+                        <div class="flex items-start justify-between gap-4"><div><p class="font-semibold text-ink-950">{{ $price->producto->nombre }}</p><p class="mt-1 font-mono text-[8px] tracking-wider text-steel-500 uppercase">{{ $price->versiones_count }} {{ $price->versiones_count === 1 ? 'versión' : 'versiones' }}</p></div><span class="font-display text-2xl font-extrabold text-ink-950">{{ $price->versionVigente ? $unitPrice($price->versionVigente->precio_kg) : '—' }}</span></div>
                         <p class="mt-3 text-xs text-steel-500">Actualizado {{ $price->versionVigente?->vigente_desde?->format('H:i:s') ?? 'sin hora' }} por {{ $price->versionVigente?->registradoPor?->nombreCompleto() ?? 'un usuario no disponible' }}.</p>
                         <div class="mt-4 flex gap-2"><a href="{{ route('precios-dia.show', $price) }}" class="inline-flex min-h-10 flex-1 items-center justify-center border border-ink-950 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Historial</a>@if ($date === today()->toDateString())<a href="{{ route('precios-dia.create', ['producto' => $price->producto_id]) }}" class="inline-flex min-h-10 flex-1 items-center justify-center bg-hazard px-3 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Cambiar</a>@endif</div>
                     </article>

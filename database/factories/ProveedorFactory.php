@@ -23,6 +23,7 @@ class ProveedorFactory extends Factory
             'nro_documento' => null,
             'nombre_razon_social' => fake()->company(),
             'telefono' => fake()->optional()->numerify('9########'),
+            'numero_cuenta' => null,
             'direccion' => fake()->optional()->address(),
             'activo' => true,
         ];

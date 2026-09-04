@@ -3,11 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\Usuario;
-use Illuminate\Database\Eloquent\Builder;
+use App\Services\AutorizacionPinAdministrador;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Validation\ValidationException;
 
 class AutorizarEdicionPesajeCargaRequest extends FormRequest
 {
@@ -43,52 +40,7 @@ class AutorizarEdicionPesajeCargaRequest extends FormRequest
 
     public function administradorAutorizador(): Usuario
     {
-        $this->ensureIsNotRateLimited();
-
-        $administrator = Usuario::query()
-            ->select(['id', 'nombres', 'apellidos', 'usuario', 'pin_autorizacion_hash', 'activo'])
-            ->whereKey($this->integer('administrador_id'))
-            ->where('activo', true)
-            ->whereNotNull('pin_autorizacion_hash')
-            ->whereHas('roles', fn (Builder $query): Builder => $query
-                ->where('nombre', 'ADMINISTRADOR')
-                ->where('activo', true))
-            ->first();
-
-        if (! $administrator instanceof Usuario
-            || ! Hash::check($this->string('pin_autorizacion')->toString(), $administrator->pin_autorizacion_hash)) {
-            RateLimiter::hit($this->throttleKey(), 600);
-
-            throw ValidationException::withMessages([
-                'pin_autorizacion' => 'El administrador o el PIN no son correctos.',
-            ]);
-        }
-
-        RateLimiter::clear($this->throttleKey());
-
-        return $administrator;
-    }
-
-    private function ensureIsNotRateLimited(): void
-    {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
-            return;
-        }
-
-        $seconds = RateLimiter::availableIn($this->throttleKey());
-
-        throw ValidationException::withMessages([
-            'pin_autorizacion' => "Demasiados intentos. Inténtalo nuevamente en {$seconds} segundos.",
-        ]);
-    }
-
-    private function throttleKey(): string
-    {
-        return implode('|', [
-            'autorizar-edicion-pesaje',
-            (string) $this->user()?->getAuthIdentifier(),
-            (string) $this->input('administrador_id'),
-            (string) $this->ip(),
-        ]);
+        return app(AutorizacionPinAdministrador::class)
+            ->confirmar($this, 'edicion-pesaje-carga');
     }
 }

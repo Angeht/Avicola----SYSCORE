@@ -164,7 +164,10 @@ class CargaProveedorControllerTest extends TestCase
     {
         $user = $this->userWithPermission();
         $dangerousText = '<script>alert("carga")</script>';
-        $load = CargaProveedor::factory()->create(['observacion' => $dangerousText]);
+        $load = CargaProveedor::factory()->create([
+            'costo_kg' => 7.25,
+            'observacion' => $dangerousText,
+        ]);
         PesajeCarga::factory()->sinJabas()->create([
             'carga_id' => $load->id,
             'observacion' => $dangerousText,
@@ -178,6 +181,8 @@ class CargaProveedorControllerTest extends TestCase
             ->assertSee($load->numero_carga)
             ->assertSee($providerName)
             ->assertSee('Costo por kg')
+            ->assertSee('S/ 7,25')
+            ->assertDontSee('S/ 7,2500')
             ->assertSee($dangerousText)
             ->assertDontSee($dangerousText, false);
     }

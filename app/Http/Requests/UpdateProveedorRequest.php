@@ -46,6 +46,7 @@ class UpdateProveedorRequest extends FormRequest
             'nro_documento' => ['nullable', 'required_with:tipo_documento_id', 'string', 'max:20', $uniqueDocument],
             'nombre_razon_social' => ['required', 'string', 'max:150'],
             'telefono' => ['nullable', 'string', 'regex:/^[0-9]{9}$/'],
+            'numero_cuenta' => ['nullable', 'string', 'max:100'],
             'direccion' => ['nullable', 'string', 'max:255'],
             'activo' => ['required', 'boolean'],
         ];
@@ -89,6 +90,7 @@ class UpdateProveedorRequest extends FormRequest
             'nombre_razon_social.required' => 'Ingresa el nombre o razón social del proveedor.',
             'nombre_razon_social.max' => 'El nombre o razón social no puede superar los 150 caracteres.',
             'telefono.regex' => 'El teléfono debe contener exactamente 9 dígitos numéricos.',
+            'numero_cuenta.max' => 'El número de cuenta no puede superar los 100 caracteres.',
             'direccion.max' => 'La dirección no puede superar los 255 caracteres.',
         ];
     }
@@ -104,6 +106,9 @@ class UpdateProveedorRequest extends FormRequest
                 : null,
             'nombre_razon_social' => $this->string('nombre_razon_social')->squish()->toString(),
             'telefono' => $this->filled('telefono') ? $this->string('telefono')->trim()->toString() : null,
+            'numero_cuenta' => $this->filled('numero_cuenta')
+                ? Str::upper($this->string('numero_cuenta')->squish()->toString())
+                : null,
             'direccion' => $this->filled('direccion') ? $this->string('direccion')->squish()->toString() : null,
             'activo' => $this->boolean('activo'),
         ]);

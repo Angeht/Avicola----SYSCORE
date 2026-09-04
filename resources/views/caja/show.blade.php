@@ -48,6 +48,7 @@
         <aside class="reveal-up reveal-up-delay-2 border border-line bg-paper shadow-panel" aria-labelledby="cash-audit-title">
             <div class="border-b border-line px-5 py-5"><p class="font-mono text-[9px] font-semibold tracking-[0.18em] text-hazard uppercase">Arqueo / Estado</p><h2 id="cash-audit-title" class="mt-1 font-display text-2xl font-bold text-ink-950 uppercase">Control de cierre</h2></div>
             <div class="p-5">
+                <div class="mb-5 border-l-4 border-danger bg-danger-soft px-4 py-3"><p class="font-mono text-[8px] tracking-wider text-danger uppercase">Apertura autorizada por</p><p class="mt-1 text-sm font-semibold text-ink-950">{{ $cashSession->aperturaAutorizadaPor?->nombreCompleto() ?? 'Registro anterior sin autorización vinculada' }}</p></div>
                 @if ($cashSession->estaAbierta())
                     <span class="inline-flex border border-hazard/40 bg-hazard-soft px-2.5 py-1 font-mono text-[9px] font-semibold tracking-wider text-ink-950 uppercase">Pendiente</span>
                     <p class="mt-4 text-sm leading-6 text-steel-500">Cuenta el efectivo físico y registra el cierre cuando finalice la operación.</p>
@@ -60,6 +61,7 @@
                     <dl class="mt-5 grid gap-4 text-sm">
                         <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Cierre registrado</dt><dd class="mt-1 font-semibold text-ink-950">{{ $cashSession->cierre_at->format('d/m/Y · H:i:s') }}</dd></div>
                         <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Responsable</dt><dd class="mt-1 font-semibold text-ink-950">{{ $cashSession->cerradaPor?->nombreCompleto() ?? 'No disponible' }}</dd></div>
+                        <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Cierre autorizado por</dt><dd class="mt-1 font-semibold text-ink-950">{{ $cashSession->cierreAutorizadaPor?->nombreCompleto() ?? 'Registro anterior sin autorización vinculada' }}</dd></div>
                         <div><dt class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Observación</dt><dd class="mt-1 leading-5 text-ink-700">{{ $cashSession->observacion_cierre ?: 'Cierre conforme, sin observaciones.' }}</dd></div>
                     </dl>
                 @endif

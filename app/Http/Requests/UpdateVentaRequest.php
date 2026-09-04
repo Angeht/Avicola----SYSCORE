@@ -60,6 +60,12 @@ class UpdateVentaRequest extends StoreVentaRequest
                     return;
                 }
 
+                if ($sale->ajustesCliente()->vigentes()->exists()) {
+                    $validator->errors()->add('motivo_edicion', 'Anula primero los ajustes comerciales vigentes para editar esta venta.');
+
+                    return;
+                }
+
                 $priceVersionIds = collect($details)
                     ->filter(fn (mixed $detail): bool => is_array($detail))
                     ->pluck('precio_version_id')

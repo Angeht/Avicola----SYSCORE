@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http\Controllers;
 
+use App\Models\AjusteProveedor;
 use App\Models\CargaProveedor;
 use App\Models\MedioPago;
 use App\Models\PagoProveedor;
@@ -123,6 +124,34 @@ class AnulacionPagoProveedorControllerTest extends TestCase
 
         $response->assertSessionHasErrors([
             'motivo_anulacion' => 'Este pago ya fue anulado.',
+        ]);
+    }
+
+    public function test_cancelling_payment_also_cancels_its_linked_discount(): void
+    {
+        $user = $this->userWithPermission();
+        $load = CargaProveedor::factory()->create(['costo_total' => 300]);
+        $payment = PagoProveedor::factory()->create([
+            'carga_id' => $load->id,
+            'monto' => 250,
+            'pagado_por' => $user->id,
+        ]);
+        $discount = AjusteProveedor::factory()->create([
+            'carga_id' => $load->id,
+            'pago_proveedor_id' => $payment->id,
+            'tipo' => 'DESCUENTO',
+            'monto' => 50,
+            'usuario_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)->post(route('pagos-proveedor.anulacion.store', $payment), [
+            'motivo_anulacion' => 'Pago registrado en la carga equivocada.',
+        ])->assertRedirect(route('pagos-proveedor.show', $payment));
+
+        $this->assertNotNull($discount->fresh()->anulado_at);
+        $this->assertDatabaseHas('vw_saldos_carga_proveedor', [
+            'carga_id' => $load->id,
+            'saldo_pendiente' => 300.00,
         ]);
     }
 

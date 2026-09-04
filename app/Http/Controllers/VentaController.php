@@ -194,6 +194,7 @@ class VentaController extends Controller
     public function edit(Request $request, Venta $venta): View
     {
         abort_if($venta->estaAnulada(), 409, 'Una venta eliminada no puede editarse.');
+        abort_if($venta->ajustesCliente()->vigentes()->exists(), 409, 'Anula primero los ajustes comerciales vigentes para editar esta venta.');
         $user = $this->authenticatedUser($request);
         $venta->load([
             'detalles' => fn ($query) => $query
@@ -249,6 +250,12 @@ class VentaController extends Controller
             if ($lockedSale->estaAnulada()) {
                 throw ValidationException::withMessages([
                     'motivo_edicion' => 'Una venta eliminada no puede editarse.',
+                ]);
+            }
+
+            if ($lockedSale->ajustesCliente()->vigentes()->lockForUpdate()->exists()) {
+                throw ValidationException::withMessages([
+                    'motivo_edicion' => 'Anula primero los ajustes comerciales vigentes para editar esta venta.',
                 ]);
             }
 
@@ -383,6 +390,17 @@ class VentaController extends Controller
                         ->orderBy('id'),
                 ])
                 ->orderBy('id'),
+            'ajustesCliente' => fn ($query) => $query
+                ->select(['id', 'numero_ajuste', 'venta_id', 'cobranza_id', 'ajuste_mercaderia_id', 'tipo', 'monto', 'motivo', 'usuario_id', 'fecha_ajuste', 'anulado_por', 'anulado_at', 'motivo_anulacion'])
+                ->with([
+                    'usuario:id,nombres,apellidos,usuario',
+                    'anuladoPor:id,nombres,apellidos,usuario',
+                    'cobranza:id,numero_cobranza',
+                    'ajusteMercaderia:id,numero_ajuste,producto_id,cantidad_pollos,peso_kg,anulado_at',
+                    'ajusteMercaderia.producto:id,nombre',
+                ])
+                ->orderByDesc('fecha_ajuste')
+                ->orderByDesc('id'),
         ]);
 
         return view('ventas.show', [
@@ -500,7 +518,7 @@ class VentaController extends Controller
     {
         $options = DB::table('vw_precio_vigente as pv')
             ->join('productos as p', 'p.id', '=', 'pv.producto_id')
-            ->join('vw_saldo_mercaderia_actual as sm', 'sm.producto_id', '=', 'p.id')
+            ->leftJoin('vw_saldo_mercaderia_actual as sm', 'sm.producto_id', '=', 'p.id')
             ->where('p.activo', true)
             ->whereDate('pv.fecha', $date)
             ->select([
@@ -509,9 +527,9 @@ class VentaController extends Controller
                 'pv.precio_kg',
                 'p.nombre as producto',
                 'p.modalidad_venta',
-                'sm.pollos_disponibles',
-                'sm.kg_disponibles',
             ])
+            ->selectRaw('COALESCE(sm.pollos_disponibles, 0) AS pollos_disponibles')
+            ->selectRaw('COALESCE(sm.kg_disponibles, 0) AS kg_disponibles')
             ->get()
             ->keyBy('producto_id');
 
@@ -523,7 +541,7 @@ class VentaController extends Controller
             ->join('precio_dia_versiones as pv', 'pv.id', '=', 'vd.precio_version_id')
             ->join('precios_dia as pd', 'pd.id', '=', 'pv.precio_dia_id')
             ->join('productos as p', 'p.id', '=', 'pd.producto_id')
-            ->join('vw_saldo_mercaderia_actual as sm', 'sm.producto_id', '=', 'p.id')
+            ->leftJoin('vw_saldo_mercaderia_actual as sm', 'sm.producto_id', '=', 'p.id')
             ->where('vd.venta_id', $sale->getKey())
             ->where('p.activo', true)
             ->select([
@@ -532,9 +550,9 @@ class VentaController extends Controller
                 'pv.precio_kg',
                 'p.nombre as producto',
                 'p.modalidad_venta',
-                'sm.pollos_disponibles',
-                'sm.kg_disponibles',
             ])
+            ->selectRaw('COALESCE(sm.pollos_disponibles, 0) AS pollos_disponibles')
+            ->selectRaw('COALESCE(sm.kg_disponibles, 0) AS kg_disponibles')
             ->get();
 
         foreach ($originalOptions as $originalOption) {

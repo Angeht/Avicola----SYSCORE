@@ -69,6 +69,7 @@ class PesajeCargaControllerTest extends TestCase
             ->assertOk()
             ->assertSee($load->numero_carga)
             ->assertSee('JABA SELECCIONABLE')
+            ->assertSee('Editable')
             ->assertDontSee('JABA INACTIVA');
         $this->assertInstanceOf(DOMElement::class, $crateTypeSelect);
         $this->assertInstanceOf(DOMElement::class, $tareInput);
@@ -77,8 +78,12 @@ class PesajeCargaControllerTest extends TestCase
         $this->assertInstanceOf(DOMElement::class, $activeCrateTypeOption);
         $this->assertFalse($crateTypeSelect->hasAttribute('disabled'));
         $this->assertFalse($tareInput->hasAttribute('disabled'));
+        $this->assertFalse($tareInput->hasAttribute('readonly'));
         $this->assertFalse($removeButton->hasAttribute('disabled'));
+        $this->assertSame('0', $tareInput->getAttribute('value'));
+        $this->assertSame('0.001', $tareInput->getAttribute('step'));
         $this->assertSame('6.800', $activeCrateTypeOption->getAttribute('data-reference-tare'));
+        $this->assertStringContainsString('ref. 6,8 kg', $activeCrateTypeOption->textContent);
         $this->assertFalse($activeCrateTypeOption->hasAttribute('data-tare'));
         $this->assertTrue($tareInput->hasAttribute('data-tare'));
     }

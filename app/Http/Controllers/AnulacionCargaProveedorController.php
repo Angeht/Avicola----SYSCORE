@@ -3,22 +3,28 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AnularCargaProveedorRequest;
+use App\Models\AjusteProveedor;
 use App\Models\CargaProveedor;
 use App\Models\PagoProveedor;
 use App\Models\ProcesoBeneficiado;
 use App\Models\Producto;
 use App\Models\Usuario;
+use App\Services\AutorizacionPinAdministrador;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class AnulacionCargaProveedorController extends Controller
 {
-    public function create(CargaProveedor $cargaProveedor): View
+    public function __construct(private AutorizacionPinAdministrador $autorizacionPin) {}
+
+    public function create(Request $request, CargaProveedor $cargaProveedor): View
     {
         abort_if($cargaProveedor->estaAnulada(), 409, 'Esta carga ya fue anulada.');
         abort_if($this->hasActivePayments($cargaProveedor), 409, 'Anula primero los pagos vigentes de la carga.');
+        abort_if($this->hasActiveAdjustments($cargaProveedor), 409, 'Anula primero los ajustes comerciales vigentes de la carga.');
         abort_if($this->hasActiveBeneficiaryProcesses($cargaProveedor), 409, 'Anula primero los procesos de beneficiado vigentes de la carga.');
 
         $cargaProveedor->load([
@@ -26,12 +32,16 @@ class AnulacionCargaProveedorController extends Controller
             'producto:id,nombre',
             'recibidoPor:id,nombres,apellidos,usuario',
         ]);
+        $user = $request->user();
+        abort_unless($user instanceof Usuario, 403);
 
         return view('cargas-proveedor.anulacion', [
+            'administrators' => $this->autorizacionPin->administradoresDisponibles(),
             'balance' => DB::table('vw_saldos_carga_proveedor')
                 ->where('carga_id', $cargaProveedor->getKey())
                 ->firstOrFail(),
             'load' => $cargaProveedor,
+            'pinSetupUser' => $user->esAdministrador() ? $user : null,
             'summary' => DB::table('vw_resumen_carga')
                 ->where('carga_id', $cargaProveedor->getKey())
                 ->firstOrFail(),
@@ -43,8 +53,9 @@ class AnulacionCargaProveedorController extends Controller
         $user = $request->user();
         abort_unless($user instanceof Usuario, 403);
         $validated = $request->validated();
+        $administrator = $this->autorizacionPin->confirmar($request, 'anulacion-carga-proveedor');
 
-        DB::transaction(function () use ($cargaProveedor, $user, $validated): void {
+        DB::transaction(function () use ($administrator, $cargaProveedor, $user, $validated): void {
             $lockedLoad = CargaProveedor::query()
                 ->whereKey($cargaProveedor->getKey())
                 ->lockForUpdate()
@@ -71,10 +82,22 @@ class AnulacionCargaProveedorController extends Controller
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->get(['id']);
+            $activeAdjustments = AjusteProveedor::query()
+                ->where('carga_id', $lockedLoad->getKey())
+                ->vigentes()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
 
             if ($activePayments->isNotEmpty()) {
                 throw ValidationException::withMessages([
                     'motivo_anulacion' => 'Anula primero los pagos vigentes de la carga.',
+                ]);
+            }
+
+            if ($activeAdjustments->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'motivo_anulacion' => 'Anula primero los ajustes comerciales vigentes de la carga.',
                 ]);
             }
 
@@ -86,6 +109,7 @@ class AnulacionCargaProveedorController extends Controller
 
             $lockedLoad->update([
                 'anulada_por' => $user->getKey(),
+                'anulacion_autorizada_por' => $administrator->getKey(),
                 'anulada_at' => now(),
                 'motivo_anulacion' => $validated['motivo_anulacion'],
             ]);
@@ -100,6 +124,11 @@ class AnulacionCargaProveedorController extends Controller
         return $load->pagosProveedor()
             ->whereNull('anulada_at')
             ->exists();
+    }
+
+    private function hasActiveAdjustments(CargaProveedor $load): bool
+    {
+        return $load->ajustesProveedor()->vigentes()->exists();
     }
 
     private function hasActiveBeneficiaryProcesses(CargaProveedor $load): bool

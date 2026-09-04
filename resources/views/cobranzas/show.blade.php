@@ -8,6 +8,7 @@
         $money = fn (float|int|string|null $value): string => 'S/ '.number_format((float) ($value ?? 0), 2, ',', '.');
         $isCancelled = $collection->estaAnulada();
         $cashSessionIsClosed = $collection->sesionCaja?->cierre_at !== null;
+        $roundingAmount = $collection->ajustesRedondeo->whereNull('anulado_at')->sum('monto');
         $canCancel = ! $isCancelled
             && ! $cashSessionIsClosed
             && $authenticatedUser?->tienePermiso('COBRANZAS_ANULAR');
@@ -44,7 +45,7 @@
 
     <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen de la cobranza">
         <div class="border-l-4 {{ $isCancelled ? 'border-steel-300' : 'border-signal' }} bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Monto recibido</p><p class="mt-2 font-display text-3xl font-extrabold {{ $isCancelled ? 'text-steel-500 line-through' : 'text-ink-950' }}">{{ $money($collection->monto_total) }}</p></div>
-        <div class="border-l-4 border-signal bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Monto aplicado</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $money($appliedAmount) }}</p></div>
+        <div class="border-l-4 border-signal bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Monto aplicado</p><p class="mt-2 font-display text-3xl font-extrabold text-ink-950">{{ $money($appliedAmount) }}</p>@if ($roundingAmount > 0)<p class="mt-1 text-xs text-steel-500">Más {{ $money($roundingAmount) }} de redondeo auditado</p>@endif</div>
         <div class="border-l-4 border-hazard bg-paper p-5 shadow-sm"><p class="font-mono text-[8px] tracking-wider text-steel-500 uppercase">Sin aplicar</p><p class="mt-2 font-display text-3xl font-extrabold {{ $unappliedAmount > 0 && ! $isCancelled ? 'text-ink-950' : 'text-steel-500' }}">{{ $isCancelled ? '—' : $money($unappliedAmount) }}</p></div>
         <div class="industrial-hatch border-l-4 border-hazard bg-ink-950 p-5 text-white shadow-sm"><p class="font-mono text-[8px] tracking-wider text-hazard uppercase">Medio de pago</p><p class="mt-2 font-display text-2xl font-extrabold uppercase">{{ $collection->medioPago->nombre }}</p><p class="mt-1 text-xs text-steel-300">{{ $collection->medioPago->es_efectivo ? 'Ingreso de efectivo' : 'Medio no efectivo' }}</p></div>
     </section>

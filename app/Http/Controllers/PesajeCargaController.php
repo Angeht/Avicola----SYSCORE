@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePesajesCargaRequest;
 use App\Http\Requests\UpdatePesajeCargaRequest;
+use App\Models\AjusteProveedor;
 use App\Models\CargaProveedor;
 use App\Models\PagoProveedor;
 use App\Models\PesajeCarga;
@@ -26,6 +27,7 @@ class PesajeCargaController extends Controller
     {
         abort_if($cargaProveedor->estaAnulada(), 409, 'No se pueden agregar pesajes a una carga anulada.');
         abort_if($cargaProveedor->tienePagosVigentes(), 409, 'No se pueden agregar pesajes a una carga con pagos vigentes.');
+        abort_if($cargaProveedor->ajustesProveedor()->vigentes()->exists(), 409, 'No se pueden agregar pesajes a una carga con ajustes comerciales vigentes.');
 
         $cargaProveedor->load([
             'proveedor:id,nombre_razon_social,nro_documento',
@@ -66,6 +68,11 @@ class PesajeCargaController extends Controller
                 $load,
                 'pesajes',
                 'No se pueden agregar pesajes porque la carga ya tiene pagos vigentes.',
+            );
+            $this->ensureLoadHasNoActiveAdjustments(
+                $load,
+                'pesajes',
+                'No se pueden agregar pesajes porque la carga ya tiene ajustes comerciales vigentes.',
             );
 
             $crateTypeIds = collect($validated['pesajes'])
@@ -166,11 +173,23 @@ class PesajeCargaController extends Controller
                 ]);
             }
 
+            if (AjusteProveedor::query()
+                ->where('carga_id', $load->getKey())
+                ->where('tipo', 'DEVOLUCION')
+                ->vigentes()
+                ->lockForUpdate()
+                ->get(['id'])
+                ->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'pesaje' => 'Anula primero las devoluciones vigentes para editar los pesajes.',
+                ]);
+            }
+
             Producto::query()
                 ->whereKey($load->producto_id)
                 ->lockForUpdate()
                 ->firstOrFail();
-            $activePaymentTotal = $this->activePaymentTotal($load);
+            $activeCoveredTotal = $this->activeCoveredTotal($load);
 
             $lockedWeighing = PesajeCarga::query()
                 ->whereKey($pesaje->getKey())
@@ -208,9 +227,16 @@ class PesajeCargaController extends Controller
 
             $totalCost = $this->recalculateTotalCost($load);
 
-            if ($totalCost->isLessThan($activePaymentTotal)) {
+            if ($totalCost->isLessThan($activeCoveredTotal)) {
+                $coveredLabel = AjusteProveedor::query()
+                    ->where('carga_id', $load->getKey())
+                    ->vigentes()
+                    ->exists()
+                    ? 'lo ya pagado o ajustado'
+                    : 'el total ya pagado';
+
                 throw ValidationException::withMessages([
-                    'pesaje' => 'El costo total corregido no puede ser menor que el total ya pagado (S/ '.$activePaymentTotal->toScale(2).').',
+                    'pesaje' => 'El costo total corregido no puede ser menor que '.$coveredLabel.' (S/ '.$activeCoveredTotal->toScale(2).').',
                 ]);
             }
         }, 3);
@@ -236,11 +262,16 @@ class PesajeCargaController extends Controller
     private function ensureLoadCanBeEdited(CargaProveedor $load): void
     {
         abort_if($load->estaAnulada(), 409, 'No se puede editar un pesaje de una carga anulada.');
+        abort_if(
+            $load->ajustesProveedor()->vigentes()->where('tipo', 'DEVOLUCION')->exists(),
+            409,
+            'Anula primero las devoluciones vigentes para editar los pesajes.',
+        );
     }
 
-    private function activePaymentTotal(CargaProveedor $load): BigDecimal
+    private function activeCoveredTotal(CargaProveedor $load): BigDecimal
     {
-        return PagoProveedor::query()
+        $payments = PagoProveedor::query()
             ->where('carga_id', $load->getKey())
             ->vigentes()
             ->lockForUpdate()
@@ -249,6 +280,17 @@ class PesajeCargaController extends Controller
                 fn (BigDecimal $total, PagoProveedor $payment): BigDecimal => $total->plus($payment->monto),
                 BigDecimal::zero(),
             );
+        $adjustments = AjusteProveedor::query()
+            ->where('carga_id', $load->getKey())
+            ->vigentes()
+            ->lockForUpdate()
+            ->get(['monto'])
+            ->reduce(
+                fn (BigDecimal $total, AjusteProveedor $adjustment): BigDecimal => $total->plus($adjustment->monto),
+                BigDecimal::zero(),
+            );
+
+        return $payments->plus($adjustments);
     }
 
     private function ensureLoadHasNoActivePayments(CargaProveedor $load, string $errorKey, string $message): void
@@ -260,6 +302,21 @@ class PesajeCargaController extends Controller
             ->get(['id']);
 
         if ($activePayments->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                $errorKey => $message,
+            ]);
+        }
+    }
+
+    private function ensureLoadHasNoActiveAdjustments(CargaProveedor $load, string $errorKey, string $message): void
+    {
+        $activeAdjustments = AjusteProveedor::query()
+            ->where('carga_id', $load->getKey())
+            ->vigentes()
+            ->lockForUpdate()
+            ->get(['id']);
+
+        if ($activeAdjustments->isNotEmpty()) {
             throw ValidationException::withMessages([
                 $errorKey => $message,
             ]);

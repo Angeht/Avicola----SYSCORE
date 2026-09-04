@@ -46,9 +46,11 @@
                         <p class="text-sm leading-6 text-steel-500">El valor es editable: confirma el dinero físico real. Yape y transferencias no se convierten en efectivo de apertura.</p>
                     </div>
 
+                    <x-confirmacion-pin-administrador :administrators="$administrators" :pin-setup-user="$pinSetupUser" operation="la apertura del día" class="mt-6" />
+
                     <div class="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-6 sm:flex-row sm:justify-end">
                         <a href="{{ route('caja.index') }}" class="inline-flex min-h-12 items-center justify-center border border-line px-6 font-display text-sm font-bold tracking-wider text-ink-700 uppercase transition hover:border-ink-950">Cancelar</a>
-                        <button type="submit" class="inline-flex min-h-12 items-center justify-center bg-ink-950 px-7 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-800">Confirmar apertura</button>
+                        <button type="submit" @disabled($administrators->isEmpty()) class="inline-flex min-h-12 items-center justify-center bg-ink-950 px-7 font-display text-sm font-bold tracking-wider text-white uppercase transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:bg-steel-300">Confirmar apertura</button>
                     </div>
                 </form>
             @endif

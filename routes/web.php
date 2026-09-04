@@ -1,7 +1,11 @@
 <?php
 
+use App\Http\Controllers\AjusteClienteController;
 use App\Http\Controllers\AjusteMercaderiaController;
+use App\Http\Controllers\AjusteProveedorController;
+use App\Http\Controllers\AnulacionAjusteClienteController;
 use App\Http\Controllers\AnulacionAjusteMercaderiaController;
+use App\Http\Controllers\AnulacionAjusteProveedorController;
 use App\Http\Controllers\AnulacionCargaProveedorController;
 use App\Http\Controllers\AnulacionCobranzaController;
 use App\Http\Controllers\AnulacionPagoProveedorController;
@@ -17,7 +21,6 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\CobranzaController;
 use App\Http\Controllers\ConciliacionMercaderiaController;
 use App\Http\Controllers\ConfiguracionEmpresaController;
-use App\Http\Controllers\ConfiguracionRespaldoController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PagoProveedorController;
 use App\Http\Controllers\PesajeCargaController;
@@ -32,7 +35,6 @@ use App\Http\Controllers\RestauracionRespaldoController;
 use App\Http\Controllers\RolActivationController;
 use App\Http\Controllers\RolController;
 use App\Http\Controllers\SesionCajaController;
-use App\Http\Controllers\TareaProgramadaRespaldoController;
 use App\Http\Controllers\TicketCobranzaController;
 use App\Http\Controllers\TicketVentaController;
 use App\Http\Controllers\TipoJabaActivationController;
@@ -76,6 +78,14 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
             ->name('reportes.customer-account.print');
         Route::get('/reportes/clientes/{cliente}/estado-cuenta/ticket', [ReporteController::class, 'customerAccountTicket'])
             ->name('reportes.customer-account.ticket');
+        Route::get('/reportes/proveedores/{proveedor}/estado-cuenta', [ReporteController::class, 'supplierAccount'])
+            ->name('reportes.supplier-account');
+        Route::get('/reportes/proveedores/{proveedor}/estado-cuenta/excel', [ReporteController::class, 'supplierAccountCsv'])
+            ->name('reportes.supplier-account.csv');
+        Route::get('/reportes/proveedores/{proveedor}/estado-cuenta/imprimir', [ReporteController::class, 'supplierAccountPrint'])
+            ->name('reportes.supplier-account.print');
+        Route::get('/reportes/proveedores/{proveedor}/estado-cuenta/ticket', [ReporteController::class, 'supplierAccountTicket'])
+            ->name('reportes.supplier-account.ticket');
         Route::get('/reportes/{report}/excel', [ReporteController::class, 'csv'])
             ->whereIn('report', ['ventas', 'cuentas-cobrar', 'deudas-proveedores', 'mercaderia', 'caja'])
             ->name('reportes.csv');
@@ -136,11 +146,6 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
             Route::post('/', [RespaldoController::class, 'store'])
                 ->middleware('throttle:3,10')
                 ->name('store');
-            Route::put('/configuracion', [ConfiguracionRespaldoController::class, 'update'])
-                ->name('configuracion.update');
-            Route::post('/tarea-programada', [TareaProgramadaRespaldoController::class, 'store'])
-                ->middleware('throttle:3,10')
-                ->name('tarea-programada.store');
             Route::get('/{respaldo}/descargar', [RespaldoController::class, 'download'])
                 ->name('download');
             Route::post('/{respaldo}/verificacion', [VerificacionRespaldoController::class, 'store'])
@@ -214,6 +219,18 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
     Route::post('/cargas-proveedor/{cargaProveedor}/anulacion', [AnulacionCargaProveedorController::class, 'store'])
         ->middleware('permission:CARGAS_ANULAR')
         ->name('cargas-proveedor.anulacion.store');
+    Route::get('/cargas-proveedor/{cargaProveedor}/ajustes/create', [AjusteProveedorController::class, 'create'])
+        ->middleware('permission:PROVEEDORES_AJUSTAR')
+        ->name('cargas-proveedor.ajustes.create');
+    Route::post('/cargas-proveedor/{cargaProveedor}/ajustes', [AjusteProveedorController::class, 'store'])
+        ->middleware('permission:PROVEEDORES_AJUSTAR')
+        ->name('cargas-proveedor.ajustes.store');
+    Route::get('/cargas-proveedor/{cargaProveedor}/ajustes/{ajusteProveedor}/anulacion', [AnulacionAjusteProveedorController::class, 'create'])
+        ->middleware('permission:PROVEEDORES_AJUSTAR')
+        ->name('cargas-proveedor.ajustes.anulacion.create');
+    Route::post('/cargas-proveedor/{cargaProveedor}/ajustes/{ajusteProveedor}/anulacion', [AnulacionAjusteProveedorController::class, 'store'])
+        ->middleware('permission:PROVEEDORES_AJUSTAR')
+        ->name('cargas-proveedor.ajustes.anulacion.store');
 
     Route::get('/ventas', [VentaController::class, 'index'])
         ->middleware('permission:VENTAS_REGISTRAR,VENTAS_EDITAR,VENTAS_ANULAR')
@@ -242,6 +259,18 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
     Route::post('/ventas/{venta}/anulacion', [AnulacionVentaController::class, 'store'])
         ->middleware('permission:VENTAS_ANULAR')
         ->name('ventas.anulacion.store');
+    Route::get('/ventas/{venta}/ajustes/create', [AjusteClienteController::class, 'create'])
+        ->middleware('permission:CLIENTES_AJUSTAR')
+        ->name('ventas.ajustes.create');
+    Route::post('/ventas/{venta}/ajustes', [AjusteClienteController::class, 'store'])
+        ->middleware('permission:CLIENTES_AJUSTAR')
+        ->name('ventas.ajustes.store');
+    Route::get('/ventas/{venta}/ajustes/{ajusteCliente}/anulacion', [AnulacionAjusteClienteController::class, 'create'])
+        ->middleware('permission:CLIENTES_AJUSTAR')
+        ->name('ventas.ajustes.anulacion.create');
+    Route::post('/ventas/{venta}/ajustes/{ajusteCliente}/anulacion', [AnulacionAjusteClienteController::class, 'store'])
+        ->middleware('permission:CLIENTES_AJUSTAR')
+        ->name('ventas.ajustes.anulacion.store');
 
     Route::get('/cobranzas', [CobranzaController::class, 'index'])
         ->middleware('permission:COBRANZAS_REGISTRAR,COBRANZAS_ANULAR')

@@ -69,7 +69,7 @@
 
         <section class="summary" aria-label="Resumen del estado de cuenta">
             <article><p class="label muted">Total de ventas</p><strong>{{ $money($summary['total_sales']) }}</strong></article>
-            <article><p class="label muted">Total abonado</p><strong>{{ $money($summary['total_collections']) }}</strong></article>
+            <article><p class="label muted">Pagos y ajustes</p><strong>{{ $money($summary['total_credits']) }}</strong></article>
             <article><p class="label muted">Restante por pagar</p><strong>{{ $money($summary['remaining']) }}</strong></article>
             <article><p class="label muted">Saldo a favor</p><strong>{{ $money($summary['credit']) }}</strong></article>
         </section>
@@ -86,7 +86,7 @@
                     <th>Documento</th>
                     <th>Detalle</th>
                     <th class="right">Venta (cargo)</th>
-                    <th class="right">Abono (pago)</th>
+                    <th class="right">Abono / ajuste</th>
                     <th class="right">Saldo acumulado</th>
                 </tr>
             </thead>
@@ -94,7 +94,7 @@
                 @forelse ($movements as $movement)
                     <tr>
                         <td>{{ \Illuminate\Support\Carbon::parse($movement->fecha_movimiento)->format('d/m/Y H:i') }}</td>
-                        <td>{{ $movement->tipo === 'VENTA' ? 'Venta' : 'Abono' }}</td>
+                        <td>{{ $movement->tipo === 'VENTA' ? 'Venta' : ($movement->tipo === 'ABONO' ? 'Abono' : 'Ajuste') }}</td>
                         <td>{{ $movement->documento }}</td>
                         <td>{{ $movement->detalle }}</td>
                         <td class="right">{{ (float) $movement->cargo > 0 ? $money($movement->cargo) : '—' }}</td>

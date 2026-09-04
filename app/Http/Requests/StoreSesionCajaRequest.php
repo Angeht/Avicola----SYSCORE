@@ -26,6 +26,8 @@ class StoreSesionCajaRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'administrador_id' => ['required', 'integer'],
+            'pin_autorizacion' => ['required', 'digits:4'],
             'monto_apertura' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:999999999999.99'],
         ];
     }
@@ -56,6 +58,10 @@ class StoreSesionCajaRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'administrador_id.required' => 'Selecciona el administrador que autoriza la apertura.',
+            'administrador_id.integer' => 'El administrador seleccionado no es válido.',
+            'pin_autorizacion.required' => 'Ingresa el PIN administrativo.',
+            'pin_autorizacion.digits' => 'El PIN administrativo debe tener exactamente 4 dígitos.',
             'monto_apertura.required' => 'Ingresa el efectivo inicial de la caja.',
             'monto_apertura.numeric' => 'El monto de apertura debe ser un número válido.',
             'monto_apertura.decimal' => 'El monto de apertura puede tener hasta dos decimales.',

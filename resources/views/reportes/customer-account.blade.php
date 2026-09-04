@@ -53,9 +53,9 @@
                 <p class="mt-2 text-xs text-steel-500">{{ $summary['sales_count'] }} {{ $summary['sales_count'] === 1 ? 'venta registrada' : 'ventas registradas' }}</p>
             </article>
             <article class="border-l-4 border-signal bg-paper p-5 shadow-panel">
-                <p class="font-mono text-[8px] font-semibold tracking-wider text-steel-500 uppercase">Total abonado</p>
-                <p class="mt-2 font-display text-3xl font-extrabold text-signal">{{ $money($summary['total_collections']) }}</p>
-                <p class="mt-2 text-xs text-steel-500">{{ $summary['collections_count'] }} {{ $summary['collections_count'] === 1 ? 'pago recibido' : 'pagos recibidos' }}</p>
+                <p class="font-mono text-[8px] font-semibold tracking-wider text-steel-500 uppercase">Pagos y ajustes</p>
+                <p class="mt-2 font-display text-3xl font-extrabold text-signal">{{ $money($summary['total_credits']) }}</p>
+                <p class="mt-2 text-xs text-steel-500">{{ $summary['collections_count'] }} pago(s) · {{ $summary['adjustments_count'] }} ajuste(s)</p>
             </article>
             <article class="border-l-4 border-danger bg-paper p-5 shadow-panel">
                 <p class="font-mono text-[8px] font-semibold tracking-wider text-steel-500 uppercase">Restante por pagar</p>
@@ -76,7 +76,7 @@
                 <button type="submit" class="inline-flex min-h-11 items-center justify-center bg-hazard px-4 font-display text-xs font-bold tracking-wider text-ink-950 uppercase transition hover:bg-ink-950 hover:text-white">Actualizar</button>
             </div>
             @error('hasta')<p class="mt-3 text-sm font-semibold text-danger">{{ $message }}</p>@enderror
-            <p class="mt-3 text-xs leading-5 text-steel-500">Incluye todas las ventas y los abonos válidos registrados hasta esta fecha.</p>
+            <p class="mt-3 text-xs leading-5 text-steel-500">Incluye ventas, pagos y ajustes comerciales válidos registrados hasta esta fecha.</p>
         </form>
     </div>
 
@@ -100,7 +100,7 @@
     <section class="reveal-up reveal-up-delay-2 mt-5 overflow-hidden border border-line bg-paper shadow-panel" aria-labelledby="account-movements-title">
         <div class="flex flex-col gap-3 border-b border-line px-5 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
             <div>
-                <p class="font-mono text-[9px] font-semibold tracking-[0.18em] text-signal uppercase">Ventas + pagos / Corte {{ \Illuminate\Support\Carbon::parse($cutoff)->format('d/m/Y') }}</p>
+                <p class="font-mono text-[9px] font-semibold tracking-[0.18em] text-signal uppercase">Ventas + pagos + ajustes / Corte {{ \Illuminate\Support\Carbon::parse($cutoff)->format('d/m/Y') }}</p>
                 <h2 id="account-movements-title" class="mt-1 font-display text-2xl font-bold text-ink-950 uppercase">Movimientos de la cuenta</h2>
             </div>
             <span class="w-fit border border-line px-2.5 py-1 font-mono text-[8px] text-steel-500 uppercase">{{ $movements->total() }} movimientos</span>
@@ -118,7 +118,7 @@
                             <th scope="col" class="px-5 py-3 font-semibold">Documento</th>
                             <th scope="col" class="px-5 py-3 font-semibold">Detalle</th>
                             <th scope="col" class="px-5 py-3 text-right font-semibold">Venta (cargo)</th>
-                            <th scope="col" class="px-5 py-3 text-right font-semibold">Abono (pago)</th>
+                            <th scope="col" class="px-5 py-3 text-right font-semibold">Abono / ajuste</th>
                             <th scope="col" class="px-5 py-3 text-right font-semibold">Saldo acumulado</th>
                         </tr>
                     </thead>
@@ -126,8 +126,8 @@
                         @foreach ($movements as $movement)
                             <tr class="transition hover:bg-hazard-soft/20">
                                 <td class="whitespace-nowrap px-5 py-4 text-sm text-ink-700">{{ \Illuminate\Support\Carbon::parse($movement->fecha_movimiento)->format('d/m/Y H:i') }}</td>
-                                <td class="px-5 py-4"><span class="inline-flex border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $movement->tipo === 'VENTA' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $movement->tipo === 'VENTA' ? 'Venta' : 'Abono' }}</span></td>
-                                <td class="px-5 py-4"><a href="{{ $movement->tipo === 'VENTA' ? route('ventas.show', $movement->referencia_id) : route('cobranzas.show', $movement->referencia_id) }}" class="font-mono text-xs font-semibold text-ink-950 underline decoration-line underline-offset-4 transition hover:decoration-signal">{{ $movement->documento }}</a></td>
+                                <td class="px-5 py-4"><span class="inline-flex border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $movement->tipo === 'VENTA' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $movement->tipo === 'VENTA' ? 'Venta' : ($movement->tipo === 'ABONO' ? 'Abono' : 'Ajuste') }}</span></td>
+                                <td class="px-5 py-4">@if ($movement->tipo === 'AJUSTE')<span class="font-mono text-xs font-semibold text-ink-950">{{ $movement->documento }}</span>@else<a href="{{ $movement->tipo === 'VENTA' ? route('ventas.show', $movement->referencia_id) : route('cobranzas.show', $movement->referencia_id) }}" class="font-mono text-xs font-semibold text-ink-950 underline decoration-line underline-offset-4 transition hover:decoration-signal">{{ $movement->documento }}</a>@endif</td>
                                 <td class="max-w-sm px-5 py-4 text-sm text-steel-500">{{ $movement->detalle }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right font-mono text-sm font-semibold text-ink-950">{{ (float) $movement->cargo > 0 ? $money($movement->cargo) : '—' }}</td>
                                 <td class="whitespace-nowrap px-5 py-4 text-right font-mono text-sm font-semibold text-signal">{{ (float) $movement->abono > 0 ? $money($movement->abono) : '—' }}</td>
@@ -143,12 +143,12 @@
                     <article class="p-5">
                         <div class="flex items-start justify-between gap-4">
                             <div>
-                                <span class="inline-flex border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $movement->tipo === 'VENTA' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $movement->tipo === 'VENTA' ? 'Venta' : 'Abono' }}</span>
+                                <span class="inline-flex border px-2 py-1 font-mono text-[8px] font-semibold tracking-wider uppercase {{ $movement->tipo === 'VENTA' ? 'border-danger/30 bg-danger-soft text-danger' : 'border-signal/30 bg-signal-soft text-signal' }}">{{ $movement->tipo === 'VENTA' ? 'Venta' : ($movement->tipo === 'ABONO' ? 'Abono' : 'Ajuste') }}</span>
                                 <p class="mt-2 text-xs text-steel-500">{{ \Illuminate\Support\Carbon::parse($movement->fecha_movimiento)->format('d/m/Y H:i') }}</p>
                             </div>
                             <p class="text-right font-display text-xl font-bold {{ $movement->tipo === 'VENTA' ? 'text-ink-950' : 'text-signal' }}">{{ $money($movement->tipo === 'VENTA' ? $movement->cargo : $movement->abono) }}</p>
                         </div>
-                        <a href="{{ $movement->tipo === 'VENTA' ? route('ventas.show', $movement->referencia_id) : route('cobranzas.show', $movement->referencia_id) }}" class="mt-4 inline-flex font-mono text-xs font-semibold text-ink-950 underline decoration-line underline-offset-4">{{ $movement->documento }}</a>
+                        @if ($movement->tipo === 'AJUSTE')<span class="mt-4 inline-flex font-mono text-xs font-semibold text-ink-950">{{ $movement->documento }}</span>@else<a href="{{ $movement->tipo === 'VENTA' ? route('ventas.show', $movement->referencia_id) : route('cobranzas.show', $movement->referencia_id) }}" class="mt-4 inline-flex font-mono text-xs font-semibold text-ink-950 underline decoration-line underline-offset-4">{{ $movement->documento }}</a>@endif
                         <p class="mt-2 text-sm text-steel-500">{{ $movement->detalle }}</p>
                         <div class="mt-4 flex items-center justify-between border-t border-line pt-4">
                             <span class="font-mono text-[8px] font-semibold tracking-wider text-steel-500 uppercase">Saldo después del movimiento</span>

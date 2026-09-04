@@ -7,13 +7,15 @@ use App\Models\CargaProveedor;
 use App\Models\PesajeCarga;
 use App\Models\Usuario;
 use App\Services\AutorizacionEdicionPesajeCarga;
+use App\Services\AutorizacionPinAdministrador;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class AutorizacionEdicionPesajeCargaController extends Controller
 {
+    public function __construct(private AutorizacionPinAdministrador $autorizacionPin) {}
+
     public function create(Request $request, CargaProveedor $cargaProveedor, PesajeCarga $pesaje): View
     {
         $this->ensureLoadCanBeEdited($cargaProveedor);
@@ -26,17 +28,7 @@ class AutorizacionEdicionPesajeCargaController extends Controller
         $pesaje->load('tipoJaba:id,nombre');
 
         return view('cargas-proveedor.pesajes.autorizar-edicion', [
-            'administrators' => Usuario::query()
-                ->select(['id', 'nombres', 'apellidos', 'usuario'])
-                ->where('activo', true)
-                ->whereNotNull('pin_autorizacion_hash')
-                ->whereHas('roles', fn (Builder $query): Builder => $query
-                    ->where('nombre', 'ADMINISTRADOR')
-                    ->where('activo', true))
-                ->orderBy('apellidos')
-                ->orderBy('nombres')
-                ->orderBy('id')
-                ->get(),
+            'administrators' => $this->autorizacionPin->administradoresDisponibles(),
             'hasActivePayments' => $cargaProveedor->tienePagosVigentes(),
             'load' => $cargaProveedor,
             'pinSetupUser' => $actor instanceof Usuario && $actor->esAdministrador() ? $actor : null,

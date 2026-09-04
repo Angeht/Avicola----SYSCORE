@@ -19,6 +19,7 @@ class TicketCobranzaController extends Controller
                 ->select(['cobranza_id', 'venta_id', 'monto_aplicado'])
                 ->with('venta:id,numero_venta,fecha_venta')
                 ->orderBy('venta_id'),
+            'ajustesRedondeo:id,cobranza_id,monto,anulado_at',
         ]);
         $appliedCents = $cobranza->aplicaciones->sum(
             fn ($application): int => $this->moneyToCents($application->monto_aplicado),
@@ -33,6 +34,7 @@ class TicketCobranzaController extends Controller
                     'razon_social' => 'AVÍCOLA - CONFIGURAR',
                     'nombre_comercial' => 'AVÍCOLA - CONFIGURAR',
                 ]),
+            'roundingAmount' => $cobranza->ajustesRedondeo->whereNull('anulado_at')->sum('monto'),
             'unappliedAmount' => max(0, $this->moneyToCents($cobranza->monto_total) - $appliedCents) / 100,
         ]);
     }

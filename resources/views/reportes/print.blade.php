@@ -30,13 +30,18 @@
     </head>
     <body>
         @php
-            $formatValue = static function (mixed $value, string $format): string {
+            $formatUnitPrice = static function (mixed $value): string {
+                $formatted = number_format((float) $value, 4, ',', '.');
+
+                return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+            };
+            $formatValue = static function (mixed $value, string $format) use ($formatUnitPrice): string {
                 return match ($format) {
                     'date' => $value ? \Illuminate\Support\Carbon::parse($value)->format('d/m/Y') : '—',
                     'integer' => number_format((int) $value, 0, ',', '.'),
                     'decimal3' => number_format((float) $value, 3, ',', '.'),
                     'money' => 'S/ '.number_format((float) $value, 2, ',', '.'),
-                    'money4' => 'S/ '.number_format((float) $value, 4, ',', '.'),
+                    'money4' => $formatUnitPrice($value),
                     'status' => str((string) $value)->lower()->replace('_', ' ')->headline()->toString(),
                     default => filled($value) ? (string) $value : '—',
                 };
@@ -44,10 +49,11 @@
         @endphp
 
         <div class="actions"><button type="button" onclick="window.print()">Imprimir / Guardar como PDF</button><a href="{{ route('reportes.show', ['report' => $reportKey, ...$filters]) }}">Volver al reporte</a></div>
-        <header><div><p class="label muted">{{ $definition['eyebrow'] }}</p><h1>{{ $definition['title'] }}</h1><p class="muted">{{ $reportKey === 'cuentas-cobrar' ? 'Corte al '.\Illuminate\Support\Carbon::parse($filters['hasta'])->format('d/m/Y') : 'Del '.\Illuminate\Support\Carbon::parse($filters['desde'])->format('d/m/Y').' al '.\Illuminate\Support\Carbon::parse($filters['hasta'])->format('d/m/Y') }}</p></div><div style="text-align:right"><p><strong>{{ config('app.name') }}</strong></p><p class="muted">Generado {{ $generatedAt->format('d/m/Y H:i') }}</p></div></header>
+        <header><div><p class="label muted">{{ $definition['eyebrow'] }}</p><h1>{{ $definition['title'] }}</h1><p class="muted">{{ in_array($reportKey, ['cuentas-cobrar', 'deudas-proveedores'], true) ? 'Corte al '.\Illuminate\Support\Carbon::parse($filters['hasta'])->format('d/m/Y') : 'Del '.\Illuminate\Support\Carbon::parse($filters['desde'])->format('d/m/Y').' al '.\Illuminate\Support\Carbon::parse($filters['hasta'])->format('d/m/Y') }}</p></div><div style="text-align:right"><p><strong>{{ config('app.name') }}</strong></p><p class="muted">Generado {{ $generatedAt->format('d/m/Y H:i') }}</p></div></header>
 
         <section class="summary">@foreach ($summary as $item)<article><p class="label muted">{{ $item['label'] }}</p><strong>{{ $formatValue($item['value'], $item['format']) }}</strong></article>@endforeach</section>
         @if ($reportKey === 'cuentas-cobrar')<p class="notice">Una fila por cliente con sus ventas realizadas, deuda total, abonos acumulados y saldo restante por pagar.</p>@endif
+        @if ($reportKey === 'deudas-proveedores')<p class="notice">Una fila por proveedor con sus cargas, pagos, ajustes y deuda acumulada al corte.</p>@endif
         @if ($truncated)<p class="notice">La vista imprimible muestra las primeras 1.000 filas. Usa la exportación Excel / CSV para obtener todos los registros.</p>@endif
 
         <table><thead><tr>@foreach ($definition['columns'] as $column)<th>{{ $column['label'] }}</th>@endforeach</tr></thead><tbody>@forelse ($rows as $row)<tr>@foreach ($definition['columns'] as $field => $column)<td>{{ $formatValue($row->{$field}, $column['format']) }}</td>@endforeach</tr>@empty<tr><td colspan="{{ count($definition['columns']) }}">No hay datos para los filtros seleccionados.</td></tr>@endforelse</tbody></table>

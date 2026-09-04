@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreCobranzaRequest;
+use App\Models\AjusteCliente;
 use App\Models\Cliente;
 use App\Models\Cobranza;
 use App\Models\MedioPago;
@@ -10,7 +11,6 @@ use App\Models\SesionCaja;
 use App\Models\Usuario;
 use App\Models\Venta;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Query\JoinClause;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,28 +75,16 @@ class CobranzaController extends Controller
     public function create(Request $request): View
     {
         $user = $this->authenticatedUser($request);
-        $sales = DB::table('vw_totales_venta as v')
-            ->selectRaw('v.cliente_id, COUNT(*) as cantidad_ventas, COALESCE(SUM(v.total_venta), 0) as total_ventas')
-            ->whereNotNull('v.cliente_id')
-            ->where('v.estado', 'ACTIVA')
-            ->groupBy('v.cliente_id');
-        $collections = DB::table('cobranzas as co')
-            ->selectRaw('co.cliente_id, COALESCE(SUM(co.monto_total), 0) as total_cobrado')
-            ->whereNotNull('co.cliente_id')
-            ->whereNull('co.anulada_at')
-            ->groupBy('co.cliente_id');
         $clients = DB::table('clientes as cl')
-            ->joinSub($sales, 'v', fn (JoinClause $join): JoinClause => $join->on('v.cliente_id', '=', 'cl.id'))
-            ->leftJoinSub($collections, 'co', fn (JoinClause $join): JoinClause => $join->on('co.cliente_id', '=', 'cl.id'))
-            ->leftJoin('vw_saldos_cliente as sc', 'sc.cliente_id', '=', 'cl.id')
+            ->join('vw_saldos_cliente as sc', 'sc.cliente_id', '=', 'cl.id')
             ->where('cl.activo', true)
-            ->whereRaw('COALESCE(v.total_ventas, 0) - COALESCE(co.total_cobrado, 0) > 0')
+            ->where('sc.deuda_total', '>', 0)
             ->select([
                 'cl.id',
                 'cl.nombres_razon_social',
                 'cl.nro_documento',
-                DB::raw('ROUND(COALESCE(v.total_ventas, 0) - COALESCE(co.total_cobrado, 0), 2) as deuda_total'),
-                DB::raw('COALESCE(sc.ventas_pendientes, 0) as ventas_pendientes'),
+                'sc.deuda_total',
+                'sc.ventas_pendientes',
             ])
             ->orderBy('cl.nombres_razon_social')
             ->get();
@@ -123,6 +111,7 @@ class CobranzaController extends Controller
                 ->orderBy('nombre')
                 ->get(),
             'preselectedClientId' => $preselectedClientId,
+            'canRound' => $user->tienePermiso('CLIENTES_AJUSTAR'),
         ]);
     }
 
@@ -162,16 +151,19 @@ class CobranzaController extends Controller
                 ->orderBy('fecha_venta')
                 ->orderBy('venta_id')
                 ->get(['venta_id', 'saldo_pendiente']);
-            $salesTotalCents = $this->moneyToCents(DB::table('vw_totales_venta')
-                ->where('cliente_id', $client->getKey())
-                ->where('estado', 'ACTIVA')
-                ->sum('total_venta'));
-            $collectedTotalCents = $this->moneyToCents(Cobranza::query()
-                ->where('cliente_id', $client->getKey())
-                ->whereNull('anulada_at')
-                ->sum('monto_total'));
-            $debtCents = max(0, $salesTotalCents - $collectedTotalCents);
+            AjusteCliente::query()
+                ->whereIn('venta_id', $lockedSaleIds)
+                ->vigentes()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get(['id']);
+            $debtCents = $balances->sum(
+                fn ($balance): int => $this->moneyToCents($balance->saldo_pendiente),
+            );
             $receivedCents = $this->moneyToCents($validated['monto_total']);
+            $roundingCents = $validated['cerrar_por_redondeo']
+                ? $debtCents - $receivedCents
+                : 0;
 
             if ($debtCents === 0) {
                 throw ValidationException::withMessages([
@@ -183,6 +175,26 @@ class CobranzaController extends Controller
                 throw ValidationException::withMessages([
                     'monto_total' => 'El monto recibido no puede superar la deuda actual del cliente.',
                 ]);
+            }
+
+            if ($validated['cerrar_por_redondeo']) {
+                if (! $user->tienePermiso('CLIENTES_AJUSTAR')) {
+                    throw ValidationException::withMessages([
+                        'cerrar_por_redondeo' => 'No tienes permiso para cerrar saldos por redondeo.',
+                    ]);
+                }
+
+                if (! $paymentMethod->es_efectivo) {
+                    throw ValidationException::withMessages([
+                        'cerrar_por_redondeo' => 'El redondeo solo está disponible para cobranzas en efectivo.',
+                    ]);
+                }
+
+                if ($roundingCents < 1 || $roundingCents > 10) {
+                    throw ValidationException::withMessages([
+                        'cerrar_por_redondeo' => 'Solo puedes redondear un saldo restante entre S/ 0,01 y S/ 0,10.',
+                    ]);
+                }
             }
 
             $openCashSession = SesionCaja::query()
@@ -217,9 +229,16 @@ class CobranzaController extends Controller
 
             $remainingCents = $receivedCents;
 
+            $remainingBalances = [];
+
             foreach ($balances as $balance) {
                 if ($remainingCents === 0) {
-                    break;
+                    $remainingBalances[] = [
+                        'venta_id' => (int) $balance->venta_id,
+                        'saldo_cents' => $this->moneyToCents($balance->saldo_pendiente),
+                    ];
+
+                    continue;
                 }
 
                 $appliedCents = min($remainingCents, $this->moneyToCents($balance->saldo_pendiente));
@@ -230,12 +249,48 @@ class CobranzaController extends Controller
                 ]);
 
                 $remainingCents -= $appliedCents;
+                $remainingBalances[] = [
+                    'venta_id' => (int) $balance->venta_id,
+                    'saldo_cents' => $this->moneyToCents($balance->saldo_pendiente) - $appliedCents,
+                ];
             }
 
             if ($remainingCents > 0) {
                 throw ValidationException::withMessages([
                     'monto_total' => 'No fue posible aplicar todo el pago a las ventas pendientes del cliente.',
                 ]);
+            }
+
+            if ($roundingCents > 0) {
+                $remainingRoundingCents = $roundingCents;
+
+                foreach ($remainingBalances as $remainingBalance) {
+                    if ($remainingRoundingCents === 0 || $remainingBalance['saldo_cents'] === 0) {
+                        continue;
+                    }
+
+                    $appliedRoundingCents = min($remainingRoundingCents, $remainingBalance['saldo_cents']);
+                    $adjustment = AjusteCliente::query()->create([
+                        'numero_ajuste' => 'TMP-'.Str::ulid(),
+                        'venta_id' => $remainingBalance['venta_id'],
+                        'cobranza_id' => $collection->getKey(),
+                        'tipo' => 'REDONDEO',
+                        'monto' => $appliedRoundingCents / 100,
+                        'motivo' => "Cierre por redondeo de la cobranza {$collection->numero_cobranza}.",
+                        'usuario_id' => $user->getKey(),
+                        'fecha_ajuste' => now(),
+                    ]);
+                    $adjustment->update([
+                        'numero_ajuste' => sprintf('AJC-%s-%06d', now()->format('Ymd'), $adjustment->getKey()),
+                    ]);
+                    $remainingRoundingCents -= $appliedRoundingCents;
+                }
+
+                if ($remainingRoundingCents > 0) {
+                    throw ValidationException::withMessages([
+                        'cerrar_por_redondeo' => 'No fue posible distribuir el redondeo entre las ventas pendientes.',
+                    ]);
+                }
             }
 
             return $collection;
@@ -258,6 +313,7 @@ class CobranzaController extends Controller
                 ->with('venta:id,numero_venta,cliente_id,fecha_venta,anulada_at')
                 ->orderBy('venta_id'),
             'aplicaciones.venta.cliente:id,nombres_razon_social,nro_documento',
+            'ajustesRedondeo:id,numero_ajuste,venta_id,cobranza_id,tipo,monto,motivo,anulado_at',
         ]);
         $saleIds = $cobranza->aplicaciones->pluck('venta_id');
         $appliedCents = $cobranza->aplicaciones->sum(

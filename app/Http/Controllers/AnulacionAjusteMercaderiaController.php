@@ -64,6 +64,12 @@ class AnulacionAjusteMercaderiaController extends Controller
                 ]);
             }
 
+            if ($lockedAdjustment->ajusteCliente()->exists() || $lockedAdjustment->ajusteProveedor()->exists()) {
+                throw ValidationException::withMessages([
+                    'motivo_anulacion' => 'Anula la devolución desde la venta o la carga correspondiente.',
+                ]);
+            }
+
             $type = TipoAjusteMercaderia::query()
                 ->whereKey($lockedAdjustment->tipo_ajuste_id)
                 ->firstOrFail();
@@ -97,6 +103,10 @@ class AnulacionAjusteMercaderiaController extends Controller
     {
         if (DB::table('conciliacion_ajuste')->where('ajuste_id', $adjustment->getKey())->exists()) {
             return 'Este ajuste está vinculado a una conciliación de mercadería y no puede anularse.';
+        }
+
+        if ($adjustment->ajusteCliente()->exists() || $adjustment->ajusteProveedor()->exists()) {
+            return 'Este movimiento pertenece a una devolución comercial. Anúlala desde la venta o la carga correspondiente.';
         }
 
         if (! $adjustment->tipoAjuste->esEntrada()) {

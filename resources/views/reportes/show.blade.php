@@ -8,13 +8,18 @@
 
 @section('content')
     @php
-        $formatValue = static function (mixed $value, string $format): string {
+        $formatUnitPrice = static function (mixed $value): string {
+            $formatted = number_format((float) $value, 4, ',', '.');
+
+            return 'S/ '.(preg_replace('/0{1,2}$/', '', $formatted) ?? $formatted);
+        };
+        $formatValue = static function (mixed $value, string $format) use ($formatUnitPrice): string {
             return match ($format) {
                 'date' => $value ? \Illuminate\Support\Carbon::parse($value)->format('d/m/Y') : '—',
                 'integer' => number_format((int) $value, 0, ',', '.'),
                 'decimal3' => number_format((float) $value, 3, ',', '.'),
                 'money' => 'S/ '.number_format((float) $value, 2, ',', '.'),
-                'money4' => 'S/ '.number_format((float) $value, 4, ',', '.'),
+                'money4' => $formatUnitPrice($value),
                 'status' => str((string) $value)->lower()->replace('_', ' ')->headline()->toString(),
                 default => filled($value) ? (string) $value : '—',
             };
@@ -34,7 +39,7 @@
 
     <form method="GET" action="{{ route('reportes.show', $reportKey) }}" class="reveal-up reveal-up-delay-1 mt-6 border border-line bg-paper p-5 shadow-panel" aria-label="Filtros del reporte">
         <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-            @if ($reportKey === 'cuentas-cobrar')
+            @if (in_array($reportKey, ['cuentas-cobrar', 'deudas-proveedores'], true))
                 <input type="hidden" name="desde" value="2000-01-01">
                 <label><span class="font-mono text-[9px] font-semibold tracking-wider text-steel-500 uppercase">Corte al</span><input type="date" name="hasta" required value="{{ $filters['hasta'] }}" class="mt-2 min-h-11 w-full border border-line bg-canvas px-3 text-sm outline-none focus:border-ink-950"></label>
             @else
@@ -68,6 +73,11 @@
             Cada fila corresponde a un cliente y muestra sus ventas realizadas, la deuda total generada, todos sus abonos y el importe que todavía falta pagar.
         </div>
     @endif
+    @if ($reportKey === 'deudas-proveedores')
+        <div class="reveal-up reveal-up-delay-1 mt-4 border-l-4 border-signal bg-signal-soft px-4 py-3 text-sm leading-6 text-ink-700">
+            Cada fila corresponde a un proveedor y reúne sus cargas, pagos, ajustes y deuda acumulada hasta la fecha de corte.
+        </div>
+    @endif
 
     <section class="reveal-up reveal-up-delay-1 mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumen del reporte">
         @foreach ($summary as $item)
@@ -76,7 +86,7 @@
     </section>
 
     <section class="reveal-up reveal-up-delay-2 mt-5 overflow-hidden border border-line bg-paper shadow-panel" aria-labelledby="report-results-title">
-        <div class="flex items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6"><div><p class="font-mono text-[8px] font-semibold tracking-[0.18em] text-signal uppercase">{{ $reportKey === 'cuentas-cobrar' ? 'Corte al '.$filters['hasta'] : $filters['desde'].' / '.$filters['hasta'] }}</p><h2 id="report-results-title" class="mt-1 font-display text-2xl font-bold text-ink-950 uppercase">Resultados</h2></div><span class="border border-line px-2.5 py-1 font-mono text-[8px] text-steel-500 uppercase">{{ $rows->total() }} filas</span></div>
+        <div class="flex items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6"><div><p class="font-mono text-[8px] font-semibold tracking-[0.18em] text-signal uppercase">{{ in_array($reportKey, ['cuentas-cobrar', 'deudas-proveedores'], true) ? 'Corte al '.$filters['hasta'] : $filters['desde'].' / '.$filters['hasta'] }}</p><h2 id="report-results-title" class="mt-1 font-display text-2xl font-bold text-ink-950 uppercase">Resultados</h2></div><span class="border border-line px-2.5 py-1 font-mono text-[8px] text-steel-500 uppercase">{{ $rows->total() }} filas</span></div>
         @if ($rows->isEmpty())
             <x-empty-state title="Sin datos en este periodo" description="Ajusta el rango de fechas o los filtros para ampliar la consulta." />
         @else
@@ -91,6 +101,9 @@
                                         @if ($reportKey === 'cuentas-cobrar' && $field === 'cliente')
                                             <p class="font-semibold text-ink-950">{{ $formatValue($row->{$field}, $column['format']) }}</p>
                                             <a href="{{ route('reportes.customer-account', ['cliente' => $row->cliente_id, 'hasta' => $filters['hasta']]) }}" class="mt-1 inline-flex font-mono text-[8px] font-semibold tracking-wider text-signal uppercase transition hover:text-ink-950">Ver detalle →</a>
+                                        @elseif ($reportKey === 'deudas-proveedores' && $field === 'proveedor')
+                                            <p class="font-semibold text-ink-950">{{ $formatValue($row->{$field}, $column['format']) }}</p>
+                                            <a href="{{ route('reportes.supplier-account', ['proveedor' => $row->proveedor_id, 'hasta' => $filters['hasta']]) }}" class="mt-1 inline-flex font-mono text-[8px] font-semibold tracking-wider text-signal uppercase transition hover:text-ink-950">Ver cargas y abonos →</a>
                                         @elseif ($column['format'] === 'status')
                                             <span class="inline-flex border border-line bg-canvas px-2 py-1 font-mono text-[8px] font-semibold tracking-wider text-ink-700 uppercase">{{ $formatValue($row->{$field}, $column['format']) }}</span>
                                         @else

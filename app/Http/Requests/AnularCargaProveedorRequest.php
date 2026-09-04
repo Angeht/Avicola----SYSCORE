@@ -22,6 +22,8 @@ class AnularCargaProveedorRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'administrador_id' => ['required', 'integer'],
+            'pin_autorizacion' => ['required', 'digits:4'],
             'motivo_anulacion' => ['required', 'string', 'min:10', 'max:255'],
         ];
     }
@@ -52,6 +54,15 @@ class AnularCargaProveedorRequest extends FormRequest
                     return;
                 }
 
+                if ($load->ajustesProveedor()->vigentes()->exists()) {
+                    $validator->errors()->add(
+                        'motivo_anulacion',
+                        'Anula primero los ajustes comerciales vigentes de la carga.',
+                    );
+
+                    return;
+                }
+
                 if ($load->procesosBeneficiado()->whereNull('anulado_at')->exists()) {
                     $validator->errors()->add(
                         'motivo_anulacion',
@@ -66,6 +77,10 @@ class AnularCargaProveedorRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'administrador_id.required' => 'Selecciona el administrador que autoriza la anulación.',
+            'administrador_id.integer' => 'El administrador seleccionado no es válido.',
+            'pin_autorizacion.required' => 'Ingresa el PIN administrativo.',
+            'pin_autorizacion.digits' => 'El PIN administrativo debe tener exactamente 4 dígitos.',
             'motivo_anulacion.required' => 'Explica el motivo de la anulación.',
             'motivo_anulacion.min' => 'El motivo debe tener al menos 10 caracteres.',
             'motivo_anulacion.max' => 'El motivo no puede superar los 255 caracteres.',
