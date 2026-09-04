@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Permiso;
 use App\Models\Usuario;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -58,9 +59,20 @@ class StoreRolRequest extends FormRequest
                     return;
                 }
 
+                $permissionIds = $this->input('permisos', []);
+
+                if (Permiso::incluyePermisoExclusivoAdministradorSistema($permissionIds)) {
+                    $validator->errors()->add(
+                        'permisos',
+                        'Los permisos de configuración y respaldos son exclusivos del rol ADMINISTRADOR.',
+                    );
+
+                    return;
+                }
+
                 $user = $this->user();
 
-                if ($user instanceof Usuario && ! $user->puedeConcederPermisos($this->input('permisos', []))) {
+                if ($user instanceof Usuario && ! $user->puedeConcederPermisos($permissionIds)) {
                     $validator->errors()->add(
                         'permisos',
                         'No puedes conceder permisos que no tienes asignados.',

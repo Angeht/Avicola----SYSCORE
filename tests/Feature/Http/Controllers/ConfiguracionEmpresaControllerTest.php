@@ -46,7 +46,7 @@ class ConfiguracionEmpresaControllerTest extends TestCase
             ->assertSee('Configuración de la empresa')
             ->assertSee($dangerousName)
             ->assertDontSee($dangerousName, false)
-            ->assertDontSee(route('tipos-jaba.index'), false)
+            ->assertSee(route('tipos-jaba.index'), false)
             ->assertSee('RUC');
     }
 
@@ -164,7 +164,7 @@ class ConfiguracionEmpresaControllerTest extends TestCase
     private function userWithManagementPermission(): Usuario
     {
         $user = Usuario::factory()->create();
-        $role = Rol::factory()->create();
+        $role = Rol::factory()->create(['nombre' => 'ADMINISTRADOR']);
         $permission = Permiso::query()
             ->where('codigo', 'CONFIGURACION_EMPRESA_GESTIONAR')
             ->firstOrFail();

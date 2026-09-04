@@ -26,7 +26,6 @@ class AdministradorOperativoRoleTest extends TestCase
         $protectedCodes = [
             'CONFIGURACION_EMPRESA_GESTIONAR',
             'RESPALDOS_GESTIONAR',
-            'TIPOS_JABA_GESTIONAR',
         ];
 
         $this->assertTrue($role->activo);
@@ -39,6 +38,7 @@ class AdministradorOperativoRoleTest extends TestCase
         $this->assertTrue($role->permisos->contains('codigo', 'CARGAS_ANULAR'));
         $this->assertTrue($role->permisos->contains('codigo', 'VENTAS_EDITAR'));
         $this->assertTrue($role->permisos->contains('codigo', 'VENTAS_ANULAR'));
+        $this->assertTrue($role->permisos->contains('codigo', 'TIPOS_JABA_GESTIONAR'));
         $cashRole = Rol::query()->where('nombre', 'CAJA')->with('permisos:id,codigo')->firstOrFail();
         $this->assertTrue($cashRole->permisos->contains('codigo', 'VENTAS_EDITAR'));
         $this->assertFalse($cashRole->permisos->contains('codigo', 'VENTAS_ANULAR'));
@@ -52,8 +52,50 @@ class AdministradorOperativoRoleTest extends TestCase
         $this->actingAs($actor)->get(route('auditorias.index'))->assertOk();
         $this->actingAs($actor)->get(route('dashboard'))->assertOk();
         $this->actingAs($actor)->get(route('configuracion.edit'))->assertForbidden();
-        $this->actingAs($actor)->get(route('tipos-jaba.index'))->assertForbidden();
+        $this->actingAs($actor)->get(route('tipos-jaba.index'))->assertOk();
         $this->actingAs($actor)->get(route('respaldos.index'))->assertForbidden();
+    }
+
+    public function test_builtin_roles_are_segmented_by_operational_responsibility(): void
+    {
+        $this->seed(AvicolaCatalogSeeder::class);
+        $this->seed(AdministradorOperativoSeeder::class);
+
+        $expectedPermissions = [
+            'CAJA' => [
+                'CAJA_ABRIR_CERRAR',
+                'CLIENTES_AJUSTAR',
+                'COBRANZAS_REGISTRAR',
+                'PRECIO_VENTA_EDITAR',
+                'PROVEEDORES_PAGAR',
+                'REPORTES_VER',
+                'VENTAS_EDITAR',
+                'VENTAS_REGISTRAR',
+            ],
+            'OPERACIONES' => [
+                'CARGAS_REGISTRAR',
+                'MERCADERIA_AJUSTAR',
+                'MERCADERIA_CONCILIAR',
+                'PROVEEDORES_AJUSTAR',
+                'REPORTES_VER',
+                'TIPOS_JABA_GESTIONAR',
+            ],
+            'CONSULTA' => [
+                'REPORTES_VER',
+            ],
+        ];
+
+        foreach ($expectedPermissions as $roleName => $permissionCodes) {
+            $actualPermissionCodes = Rol::query()
+                ->where('nombre', $roleName)
+                ->firstOrFail()
+                ->permisos()
+                ->orderBy('codigo')
+                ->pluck('codigo')
+                ->all();
+
+            $this->assertSame($permissionCodes, $actualPermissionCodes, "Permisos incorrectos para {$roleName}.");
+        }
     }
 
     public function test_operational_administrator_cannot_elevate_itself_or_manage_total_administrators(): void
@@ -77,7 +119,7 @@ class AdministradorOperativoRoleTest extends TestCase
                 'permisos' => [$userManagementPermission->id, $backupPermission->id],
             ])
             ->assertSessionHasErrors([
-                'permisos' => 'No puedes conceder permisos que no tienes asignados.',
+                'permisos' => 'Los permisos de configuración y respaldos son exclusivos del rol ADMINISTRADOR.',
             ]);
         $this->assertDatabaseMissing('roles', ['nombre' => 'ROL ELEVADO']);
 
@@ -107,6 +149,30 @@ class AdministradorOperativoRoleTest extends TestCase
         $this->actingAs($actor)
             ->get(route('roles.edit', $administratorRole))
             ->assertForbidden();
+    }
 
+    public function test_system_permissions_are_ignored_for_a_non_administrator_even_with_a_stale_assignment(): void
+    {
+        $role = Rol::factory()->create(['nombre' => 'ROL OBSOLETO']);
+        $permissions = collect(Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA)
+            ->map(fn (string $code): Permiso => Permiso::query()->firstOrCreate(
+                ['codigo' => $code],
+                ['nombre' => $code],
+            ));
+        $permissionIds = $permissions->pluck('id')->all();
+        $role->permisos()->attach($permissionIds);
+        $actor = Usuario::factory()->create();
+        $actor->roles()->attach($role);
+
+        foreach (Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA as $code) {
+            $this->assertFalse($actor->tienePermiso($code));
+        }
+
+        $this->assertEmpty(array_intersect(
+            $permissionIds,
+            $actor->idsPermisosConcedibles(),
+        ));
+        $this->actingAs($actor)->get(route('configuracion.edit'))->assertForbidden();
+        $this->actingAs($actor)->get(route('respaldos.index'))->assertForbidden();
     }
 }

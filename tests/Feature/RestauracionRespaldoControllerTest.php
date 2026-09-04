@@ -96,7 +96,7 @@ class RestauracionRespaldoControllerTest extends TestCase
     private function userWithManagementPermission(): Usuario
     {
         $user = Usuario::factory()->create();
-        $role = Rol::factory()->create();
+        $role = Rol::factory()->create(['nombre' => 'ADMINISTRADOR']);
         $permission = Permiso::query()->firstOrCreate(
             ['codigo' => 'RESPALDOS_GESTIONAR'],
             ['nombre' => 'Gestionar respaldos'],

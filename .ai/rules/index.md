@@ -12,6 +12,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/{Models,Http/Controllers,Http/Requests}/** | .ai/rules/controllers-http-requests.md |
 | app/Http/{Controllers,Requests}/** | .ai/rules/controllers-requests.md |
 | app/Http/Controllers/ConciliacionMercaderiaController.php, app/Http/Controllers/AplicacionAbonoController.php, app/Http/Controllers/{Usuario*,Rol*}Controller.php, app/Http/Controllers/**/*Proveedor*.php, app/Http/Controllers/*Respaldo*.php, app/Http/Controllers/*CargaController.php, app/Http/Controllers/**, app/Http/Controllers/ReporteController.php | .ai/rules/controllers.md |
+| {app/Models/Usuario.php,app/Models/Permiso.php,app/Http/Controllers/RolController.php,app/Http/Requests/*RolRequest.php,database/{migrations,seeders}/**,tests/Feature/**} | .ai/rules/feature.md |
 | app/{Http/Controllers/VentaController.php,Http/Requests/*VentaRequest.php,Models/Venta.php} | .ai/rules/http-controllers-requests.md |
 | app/Http/Controllers/TipoJaba*.php,app/Http/Requests/*TipoJabaRequest.php | .ai/rules/http-requests.md |
 | {app/Http/Controllers/CobranzaController.php,app/Http/Requests/StoreCobranzaRequest.php,resources/views/cobranzas/create.blade.php,resources/js/app.js} | .ai/rules/js.md |

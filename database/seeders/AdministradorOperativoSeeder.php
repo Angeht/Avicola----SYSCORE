@@ -47,13 +47,12 @@ class AdministradorOperativoSeeder extends Seeder
                     ]);
             }
 
-            $excludedCodes = [
+            $systemAdministratorOnlyCodes = [
                 'CONFIGURACION_EMPRESA_GESTIONAR',
-                'TIPOS_JABA_GESTIONAR',
                 'RESPALDOS_GESTIONAR',
             ];
             $operationalPermissionIds = DB::table('permisos')
-                ->whereNotIn('codigo', $excludedCodes)
+                ->whereNotIn('codigo', $systemAdministratorOnlyCodes)
                 ->orderBy('id')
                 ->pluck('id');
 
@@ -84,6 +83,60 @@ class AdministradorOperativoSeeder extends Seeder
                         ->all(),
                 );
             }
+
+            $this->syncRolePermissions('CAJA', [
+                'VENTAS_REGISTRAR',
+                'VENTAS_EDITAR',
+                'PRECIO_VENTA_EDITAR',
+                'COBRANZAS_REGISTRAR',
+                'CLIENTES_AJUSTAR',
+                'PROVEEDORES_PAGAR',
+                'CAJA_ABRIR_CERRAR',
+                'REPORTES_VER',
+            ], 'Ventas, cobranzas, pagos a proveedores y cierre de caja.');
+            $this->syncRolePermissions('OPERACIONES', [
+                'CARGAS_REGISTRAR',
+                'PROVEEDORES_AJUSTAR',
+                'MERCADERIA_AJUSTAR',
+                'MERCADERIA_CONCILIAR',
+                'TIPOS_JABA_GESTIONAR',
+                'REPORTES_VER',
+            ], 'Cargas, pesajes, jabas e inventario, sin movimientos de dinero.');
+            $this->syncRolePermissions('CONSULTA', [
+                'REPORTES_VER',
+            ], 'Consulta de reportes sin modificar operaciones.');
         });
+    }
+
+    /** @param list<string> $permissionCodes */
+    private function syncRolePermissions(string $roleName, array $permissionCodes, string $description): void
+    {
+        $roleId = DB::table('roles')->where('nombre', $roleName)->value('id');
+
+        if ($roleId === null) {
+            return;
+        }
+
+        DB::table('roles')->where('id', $roleId)->update([
+            'descripcion' => $description,
+            'updated_at' => now(),
+        ]);
+        DB::table('rol_permiso')->where('rol_id', $roleId)->delete();
+
+        $permissionIds = DB::table('permisos')
+            ->whereIn('codigo', $permissionCodes)
+            ->orderBy('id')
+            ->pluck('id');
+
+        if ($permissionIds->isNotEmpty()) {
+            DB::table('rol_permiso')->insert(
+                $permissionIds
+                    ->map(fn (mixed $permissionId): array => [
+                        'rol_id' => $roleId,
+                        'permiso_id' => $permissionId,
+                    ])
+                    ->all(),
+            );
+        }
     }
 }

@@ -98,7 +98,7 @@ class RolController extends Controller
         $rol->load('permisos:id,codigo,nombre');
 
         return view('roles.edit', [
-            'permissionsByArea' => $this->permissionsByArea($actor),
+            'permissionsByArea' => $this->permissionsByArea($actor, $rol),
             'role' => $rol,
         ]);
     }
@@ -161,10 +161,17 @@ class RolController extends Controller
     /**
      * @return Collection<string, Collection<int, Permiso>>
      */
-    private function permissionsByArea(Usuario $actor): Collection
+    private function permissionsByArea(Usuario $actor, ?Rol $role = null): Collection
     {
         return Permiso::query()
             ->select(['id', 'codigo', 'nombre', 'descripcion'])
+            ->when(
+                $role?->nombre !== 'ADMINISTRADOR',
+                fn (Builder $query): Builder => $query->whereNotIn(
+                    'codigo',
+                    Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA,
+                ),
+            )
             ->when(
                 ! $actor->esAdministrador(),
                 fn (Builder $query): Builder => $query->whereIn('id', $actor->idsPermisosConcedibles()),

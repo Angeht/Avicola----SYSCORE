@@ -43,8 +43,8 @@ SQL);
             DB::unprepared(<<<'SQL'
 INSERT INTO roles (nombre,descripcion) VALUES
 ('ADMINISTRADOR','Acceso completo al sistema.'),
-('CAJA','Ventas, cobranzas, abonos y cierre de caja.'),
-('OPERACIONES','Registro de cargas, pesajes y proveedores.'),
+('CAJA','Ventas, cobranzas, pagos a proveedores y cierre de caja.'),
+('OPERACIONES','Cargas, pesajes, jabas e inventario, sin movimientos de dinero.'),
 ('CONSULTA','Consulta de reportes sin modificar operaciones.');
 SQL);
 
@@ -85,6 +85,7 @@ JOIN permisos p ON p.codigo IN (
     'PRECIO_VENTA_EDITAR',
     'COBRANZAS_REGISTRAR',
     'CLIENTES_AJUSTAR',
+    'PROVEEDORES_PAGAR',
     'CAJA_ABRIR_CERRAR',
     'REPORTES_VER'
 )
@@ -97,11 +98,10 @@ SELECT r.id,p.id
 FROM roles r
 JOIN permisos p ON p.codigo IN (
     'CARGAS_REGISTRAR',
-    'PROVEEDORES_PAGAR',
     'PROVEEDORES_AJUSTAR',
-    'PROVEEDORES_PAGO_ANULAR',
     'MERCADERIA_AJUSTAR',
     'MERCADERIA_CONCILIAR',
+    'TIPOS_JABA_GESTIONAR',
     'REPORTES_VER'
 )
 WHERE r.nombre='OPERACIONES';

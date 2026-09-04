@@ -176,6 +176,68 @@ class RolControllerTest extends TestCase
         $this->assertSame(Permiso::query()->count(), $administratorRole->permisos()->count());
     }
 
+    public function test_system_only_permissions_are_hidden_when_creating_a_custom_role(): void
+    {
+        $actor = $this->systemAdministrator();
+
+        foreach (Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA as $code) {
+            Permiso::query()->firstOrCreate(['codigo' => $code], ['nombre' => $code]);
+        }
+
+        $response = $this->actingAs($actor)->get(route('roles.create'));
+
+        $response->assertOk();
+
+        foreach (Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA as $code) {
+            $response->assertDontSee($code);
+        }
+    }
+
+    public function test_even_a_system_administrator_cannot_assign_system_only_permissions_to_a_custom_role(): void
+    {
+        $actor = $this->systemAdministrator();
+        $reportsPermission = Permiso::factory()->create(['codigo' => 'REPORTES_VER']);
+        $configurationPermission = Permiso::query()->firstOrCreate(
+            ['codigo' => 'CONFIGURACION_EMPRESA_GESTIONAR'],
+            ['nombre' => 'Gestionar configuración'],
+        );
+
+        $this->actingAs($actor)->post(route('roles.store'), [
+            'nombre' => 'ADMINISTRADOR PERSONALIZADO',
+            'descripcion' => 'No debe administrar el sistema',
+            'permisos' => [$reportsPermission->id, $configurationPermission->id],
+        ])->assertSessionHasErrors([
+            'permisos' => 'Los permisos de configuración y respaldos son exclusivos del rol ADMINISTRADOR.',
+        ]);
+
+        $this->assertDatabaseMissing('roles', ['nombre' => 'ADMINISTRADOR PERSONALIZADO']);
+    }
+
+    public function test_system_only_permissions_cannot_be_added_to_an_existing_custom_role(): void
+    {
+        $actor = $this->systemAdministrator();
+        $role = Rol::factory()->create(['nombre' => 'SUPERVISOR']);
+        $reportsPermission = Permiso::factory()->create(['codigo' => 'REPORTES_VER']);
+        $backupPermission = Permiso::query()->firstOrCreate(
+            ['codigo' => 'RESPALDOS_GESTIONAR'],
+            ['nombre' => 'Gestionar respaldos'],
+        );
+        $role->permisos()->attach($reportsPermission);
+
+        $this->actingAs($actor)->put(route('roles.update', $role), [
+            'nombre' => 'SUPERVISOR',
+            'descripcion' => 'Supervisión operativa',
+            'permisos' => [$reportsPermission->id, $backupPermission->id],
+        ])->assertSessionHasErrors([
+            'permisos' => 'Los permisos de configuración y respaldos son exclusivos del rol ADMINISTRADOR.',
+        ]);
+
+        $this->assertDatabaseMissing('rol_permiso', [
+            'rol_id' => $role->id,
+            'permiso_id' => $backupPermission->id,
+        ]);
+    }
+
     private function userWithPermission(): Usuario
     {
         $user = Usuario::factory()->create();
@@ -183,6 +245,15 @@ class RolControllerTest extends TestCase
         $permission = Permiso::factory()->create(['codigo' => 'USUARIOS_GESTIONAR']);
 
         $role->permisos()->attach($permission);
+        $user->roles()->attach($role);
+
+        return $user;
+    }
+
+    private function systemAdministrator(): Usuario
+    {
+        $user = Usuario::factory()->create();
+        $role = Rol::factory()->create(['nombre' => 'ADMINISTRADOR']);
         $user->roles()->attach($role);
 
         return $user;

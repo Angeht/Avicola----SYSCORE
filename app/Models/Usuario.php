@@ -148,9 +148,18 @@ class Usuario extends Authenticatable
             return true;
         }
 
+        $codigosPermitidos = collect($codigos)
+            ->diff(Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA)
+            ->values()
+            ->all();
+
+        if ($codigosPermitidos === []) {
+            return false;
+        }
+
         return $this->roles->contains(
             fn (Rol $rol): bool => $rol->activo && $rol->permisos->contains(
-                fn (Permiso $permiso): bool => in_array($permiso->codigo, $codigos, true),
+                fn (Permiso $permiso): bool => in_array($permiso->codigo, $codigosPermitidos, true),
             ),
         );
     }
@@ -168,11 +177,13 @@ class Usuario extends Authenticatable
                 ->all();
         }
 
-        $this->loadMissing('roles.permisos:id');
+        $this->load('roles.permisos:id,codigo');
 
         return $this->roles
             ->where('activo', true)
-            ->flatMap(fn (Rol $role): Collection => $role->permisos->pluck('id'))
+            ->flatMap(fn (Rol $role): Collection => $role->permisos
+                ->whereNotIn('codigo', Permiso::CODIGOS_EXCLUSIVOS_ADMINISTRADOR_SISTEMA)
+                ->pluck('id'))
             ->unique()
             ->sort()
             ->values()
